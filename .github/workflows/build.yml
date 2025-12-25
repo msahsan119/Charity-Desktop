@@ -22,7 +22,7 @@ jobs:
           
       - name: Build Mac App
         run: |
-          python -m PyInstaller --noconsole --onefile --name="Project_Task_Mac" \
+          python -m PyInstaller --noconsole --onefile --name="Charity_Mac" \
           --hidden-import=reportlab.graphics.barcode \
           --hidden-import=reportlab.pdfbase._fontdata \
           --hidden-import=matplotlib.backends.backend_tkagg \
@@ -33,7 +33,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MacOS-App
-          path: dist/Project_Task_Mac
+          path: dist/Charity_Mac
 
   # --- BUILD FOR WINDOWS ---
   build-windows:
@@ -55,7 +55,7 @@ jobs:
       - name: Build Windows EXE
         # IMPORTANT: Windows uses backticks (`) for line continuation in PowerShell
         run: |
-          python -m PyInstaller --noconsole --onefile --name="Project_Task" `
+          python -m PyInstaller --noconsole --onefile --name="Charity" `
           --hidden-import=reportlab.graphics.barcode `
           --hidden-import=reportlab.pdfbase._fontdata `
           --hidden-import=matplotlib.backends.backend_tkagg `
@@ -68,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Windows-Exe
-          path: dist/Project_Task.exe
+          path: dist/Charity.exe
 
   # --- BUILD FOR LINUX ---
   build-linux:
@@ -94,7 +94,7 @@ jobs:
 
       - name: Build Linux Binary
         run: |
-          python -m PyInstaller --noconsole --onefile --name="Project_Task_Linux" \
+          python -m PyInstaller --noconsole --onefile --name="Charity_Linux" \
           --hidden-import=reportlab.graphics.barcode \
           --hidden-import=reportlab.pdfbase._fontdata \
           --hidden-import=matplotlib.backends.backend_tkagg \
@@ -105,5 +105,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Linux-Binary
-          path: dist/Project_Task_Linux
+          path: dist/Charity_Linux
 
