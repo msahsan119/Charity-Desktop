@@ -9,9 +9,11 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash  # Forces Bash shell on all OSs to fix command syntax errors
     strategy:
       matrix:
-        # Building for Windows, Mac, and Linux
         os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
@@ -35,10 +37,10 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas matplotlib reportlab plotly pyinstaller pillow
+        pip install pandas matplotlib reportlab pyinstaller pillow
 
     # 5. Build the App
-    # ADDED FIX: --hidden-import=PIL._tkinter_finder
+    # We include specific hidden imports for Pillow (PIL) to fix the image error
     - name: Build with PyInstaller
       run: |
         pyinstaller --onefile --clean --name "Charity-Desktop" \
