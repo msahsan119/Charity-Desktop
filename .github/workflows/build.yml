@@ -1,0 +1,60 @@
+name: Build Charity Desktop App
+
+on: [push]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # Define the three OS environments
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: Charity_App_Linux
+            binary_path: dist/Charity_App_Linux
+          - os: macos-latest
+            artifact_name: Charity_App_Mac
+            binary_path: dist/Charity_App_Mac
+          - os: windows-latest
+            artifact_name: Charity_App_Windows
+            binary_path: dist/Charity_App_Windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Linux-specific: Install Tkinter for the GUI
+      - name: Install System Dependencies (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libtk8.6
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller --noconsole --onefile \
+          --name="${{ matrix.artifact_name }}" \
+          --hidden-import=reportlab.graphics.barcode \
+          --hidden-import=reportlab.pdfbase._fontdata \
+          --hidden-import=matplotlib.backends.backend_tkagg \
+          --hidden-import=babel.numbers \
+          Charity.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.binary_path }}
