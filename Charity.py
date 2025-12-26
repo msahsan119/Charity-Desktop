@@ -42,14 +42,11 @@ class CharityApp:
         self.root = root
         self.root.title("Charity Management System - Desktop Edition")
         
-        # Cross-platform maximize
-        self.root.geometry("1400x900")
+        # Window State
         try:
             self.root.state('zoomed')
         except:
-            try:
-                self.root.attributes('-zoomed', True)
-            except: pass
+            self.root.geometry("1400x900")
         
         # Initialize Data
         self.df = self.load_data()
@@ -64,7 +61,7 @@ class CharityApp:
         self.create_tabs()
         
         # Initial Refresh
-        self.refresh_dashboard()
+        self.refresh_all_views()
 
     # --- DATA HANDLING ---
     def load_data(self):
@@ -93,6 +90,7 @@ class CharityApp:
 
     def save_members(self):
         with open(MEMBERS_FILE, 'w') as f: json.dump(self.members_db, f)
+        self.refresh_all_views()
 
     def get_fund_balance(self, category):
         if self.df.empty: return 0.0
@@ -100,6 +98,13 @@ class CharityApp:
         inc = self.df[(self.df['Type'] == 'Incoming') & (self.df['Category'] == category)]['Amount'].sum()
         out = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Category'] == category)]['Amount'].sum()
         return inc - out
+
+    def refresh_all_views(self):
+        """Master refresh function"""
+        self.refresh_dashboard()
+        self.update_member_dropdown() # Updates Tab 1 dropdown
+        self.refresh_member_list_tab() # Updates Tab 6 list
+        self.refresh_tables() # Updates Tab 2, 3 tables
 
     # --- UI LAYOUT ---
     def create_dashboard_header(self):
@@ -113,7 +118,9 @@ class CharityApp:
         self.lbl_funds.pack(side=tk.RIGHT, padx=20, pady=10)
 
     def refresh_dashboard(self):
-        if self.df.empty: return
+        if self.df.empty: 
+            self.lbl_stats.config(text="No Data Available")
+            return
         
         # Calculate Stats
         curr_yr = datetime.now().year
@@ -136,24 +143,23 @@ class CharityApp:
         self.lbl_funds.config(text=fund_txt)
 
     def create_tabs(self):
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
+        nb = ttk.Notebook(self.root)
+        nb.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Correctly naming the tabs to match the setup functions
-        self.tab_mem = ttk.Frame(self.notebook)
-        self.tab_trans = ttk.Frame(self.notebook)
-        self.tab_log = ttk.Frame(self.notebook)
-        self.tab_don = ttk.Frame(self.notebook)
-        self.tab_ana = ttk.Frame(self.notebook)
-        self.tab_rep = ttk.Frame(self.notebook)
+        # FIX: Naming these correctly so setup functions can find them
+        self.tab_trans = ttk.Frame(nb)
+        self.tab_log = ttk.Frame(nb)
+        self.tab_don = ttk.Frame(nb)
+        self.tab_ana = ttk.Frame(nb)
+        self.tab_rep = ttk.Frame(nb)
+        self.tab_mem = ttk.Frame(nb)
         
-        
-        self.notebook.add(self.tab_mem, text="1. Member Management")
-        self.notebook.add(self.tab_trans, text="2. Transaction Entry")
-        self.notebook.add(self.tab_log, text="3. Activity Log")
-        self.notebook.add(self.tab_don, text="4. Donation List")
-        self.notebook.add(self.tab_ana, text="5. Analysis")
-        self.notebook.add(self.tab_rep, text="6. Member Reports (PDF)")
+        nb.add(self.tab_mem, text="1. Member Management")
+        nb.add(self.tab_trans, text="2. Transaction Entry")
+        nb.add(self.tab_log, text="3. Activity Log")
+        nb.add(self.tab_don, text="4. Donation List")
+        nb.add(self.tab_ana, text="5. Analysis")
+        nb.add(self.tab_rep, text="6. Member Reports")
         
         
         self.setup_member_tab()
@@ -259,9 +265,14 @@ class CharityApp:
             self.ent_med.set("")
 
     def update_member_dropdown(self):
+        # Explicitly checks the current group selection variable and filters the list
         grp = self.var_inc_grp.get()
-        mems = [n for n, d in self.members_db.items() if d['group'] == grp]
+        # Find members where 'group' matches selection
+        mems = [name for name, data in self.members_db.items() if data.get('group') == grp]
         self.ent_inc_name['values'] = sorted(mems)
+        # Clear current selection if not in new list
+        if self.ent_inc_name.get() not in mems:
+            self.ent_inc_name.set('')
 
     def submit_transaction(self):
         try:
@@ -309,7 +320,7 @@ class CharityApp:
         except ValueError:
             messagebox.showerror("Error", "Invalid Amount")
 
-    # --- TAB 6: MEMBER MANAGEMENT ---
+    # --- TAB 6: MEMBER MANAGEMENT (EXPANDED) ---
     def setup_member_tab(self):
         # Split Frame: Left (Form), Right (Table)
         paned = tk.PanedWindow(self.tab_mem, orient=tk.HORIZONTAL)
@@ -420,12 +431,12 @@ class CharityApp:
     def delete_transaction(self):
         sel = self.tree_log.selection()
         if not sel: return
-        id_to_del = self.tree_log.item(sel[0])['values'][-1]
-        self.df = self.df[self.df['ID'] != id_to_del]
-        self.save_data()
+        if messagebox.askyesno("Confirm", "Delete selected transaction?"):
+            ids = [self.tree_log.item(i)['values'][-1] for i in sel]
+            self.df = self.df[~self.df['ID'].isin(ids)]
+            self.save_data()
 
-    def refresh_tables(self):
-        # Tab 2 Log
+    def refresh_log(self):
         for i in self.tree_log.get_children(): self.tree_log.delete(i)
         yr = self.log_yr.get()
         v = self.df.copy()
@@ -435,18 +446,6 @@ class CharityApp:
             sub = r['SubCategory'] if r['Type'] == 'Outgoing' else ""
             if r['Medical']: sub += f" ({r['Medical']})"
             self.tree_log.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], sub, f"{r['Amount']:.2f}", r['ID']))
-            
-        # Tab 3 Donation
-        for i in self.tree_don.get_children(): self.tree_don.delete(i)
-        d_v = self.df[self.df['Type'] == 'Outgoing']
-        for _, r in d_v.iterrows():
-             self.tree_don.insert("", "end", values=(r['Date'], r['Name_Details'], r['Category'], r['SubCategory'], f"{r['Amount']:.2f}"))
-             
-        # Tab 1 Last 5
-        for i in self.tree_last5.get_children(): self.tree_last5.delete(i)
-        rec = self.df.tail(5)
-        for _, r in rec.iloc[::-1].iterrows():
-            self.tree_last5.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], f"{r['Amount']:.2f}"))
 
     # --- TAB 3: DONATION LIST ---
     def setup_donation_tab(self):
@@ -460,26 +459,38 @@ class CharityApp:
         for c in cols: self.tree_don.heading(c, text=c)
         self.tree_don.pack(fill="both", expand=True, padx=10)
 
+    def refresh_donations(self):
+        for i in self.tree_don.get_children(): self.tree_don.delete(i)
+        don_df = self.df[self.df['Type'] == 'Outgoing']
+        for _, r in don_df.iterrows():
+            self.tree_don.insert("", "end", values=(r['Date'], r['Name_Details'], r['Category'], r['SubCategory'], f"{r['Amount']:.2f}"))
+
     # --- TAB 4: ANALYSIS ---
     def setup_analysis_tab(self):
+        # Using Matplotlib inside Tkinter
         f = tk.Frame(self.tab_ana); f.pack(fill="both", expand=True, padx=10, pady=10)
+        
         self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=(10, 5))
         self.canvas = FigureCanvasTkAgg(self.fig, master=f)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        
         ttk.Button(self.tab_ana, text="Update Charts", command=self.plot_analysis).pack()
 
     def plot_analysis(self):
         self.ax1.clear(); self.ax2.clear()
+        
         inc = self.df[self.df['Type'] == "Incoming"]
         if not inc.empty:
             ig = inc.groupby("Category")['Amount'].sum()
             self.ax1.pie(ig, labels=ig.index, autopct='%1.1f%%')
             self.ax1.set_title("Income Sources")
+            
         out = self.df[self.df['Type'] == "Outgoing"]
         if not out.empty:
             og = out.groupby("Category")['Amount'].sum()
             self.ax2.pie(og, labels=og.index, autopct='%1.1f%%')
             self.ax2.set_title("Donation Distribution")
+            
         self.canvas.draw()
 
     # --- TAB 5: REPORTS & PDF ---
@@ -494,12 +505,13 @@ class CharityApp:
         
         ttk.Button(f, text="Generate PDF", command=self.generate_report_pdf).pack(side="left", padx=20)
         
-        # Messages
+        # Text Areas for Messages
         msg_frame = tk.LabelFrame(self.tab_rep, text="PDF Messages")
-        msg_frame.pack(fill="x", padx=20)
-        self.txt_header = tk.Text(msg_frame, height=15); self.txt_header.pack(fill="x", pady=15)
+        msg_frame.pack(fill="x", padx=10)
+        self.txt_header = tk.Text(msg_frame, height=2); self.txt_header.pack(fill="x", pady=2)
         self.txt_header.insert("1.0", "We appreciate your generous contributions.")
-        self.txt_footer = tk.Text(msg_frame, height=15); self.txt_footer.pack(fill="x", pady=15)
+        
+        self.txt_footer = tk.Text(msg_frame, height=2); self.txt_footer.pack(fill="x", pady=2)
         self.txt_footer.insert("1.0", "Contact admin for queries.")
 
     def update_rep_dropdown(self):
@@ -509,16 +521,13 @@ class CharityApp:
     def generate_report_pdf(self):
         if not HAS_PDF: return messagebox.showerror("Error", "ReportLab not installed")
         name = self.rep_mem.get()
-        year = int(self.rep_yr.get())
+        if not name: return
         
-        # Filter Data
+        year = int(self.rep_yr.get())
         mdf = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming') & (self.df['Year'] == year)]
         
-        # Member Info
+        # Prepare Data
         mem_info = self.members_db.get(name, {})
-        mem_since = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming')]['Date'].min()
-        if pd.isna(mem_since): mem_since = "N/A"
-        
         fname = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=f"{name}_{year}.pdf")
         if not fname: return
         
@@ -544,11 +553,13 @@ class CharityApp:
             elements.append(Paragraph(HADITH_QUOTE, quote_style))
             elements.append(Spacer(1, 20))
             
-            # Profile
-            elements.append(Paragraph(f"<b>Name:</b> {name}", styles['Normal']))
-            elements.append(Paragraph(f"<b>Member Since:</b> {mem_since}", styles['Normal']))
-            elements.append(Paragraph(f"<b>Address:</b> {mem_info.get('address','-')}", styles['Normal']))
-            elements.append(Paragraph(f"<b>Phone/Email:</b> {mem_info.get('phone','-')} / {mem_info.get('email','-')}", styles['Normal']))
+            # Member Info
+            elements.append(Paragraph(f"<b>Member:</b> {name}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Details:</b> {mem_info.get('address','-')} | {mem_info.get('phone','-')}", styles['Normal']))
+            elements.append(Spacer(1, 15))
+            
+            # Custom Header Msg
+            elements.append(Paragraph(self.txt_header.get("1.0", "end-1c"), styles['Italic']))
             elements.append(Spacer(1, 15))
             
             # Table 1: Contributions
@@ -556,20 +567,24 @@ class CharityApp:
             data1 = [["Date", "Category", "Amount"]]
             total = 0
             for _, r in mdf.iterrows():
-                m_name = MONTH_NAMES[r['Month']-1]
-                data1.append([m_name, r['Category'], f"{r['Amount']:.2f}"])
+                mname = MONTH_NAMES[r['Month']-1]
+                data1.append([mname, r['Category'], f"{r['Amount']:.2f}"])
                 total += r['Amount']
             data1.append(["", "TOTAL:", f"{total:.2f}"])
             
-            t1 = Table(data1, colWidths=[150, 150, 100])
-            t1.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.darkgreen), ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke), ('GRID',(0,0),(-1,-1),1,colors.black)]))
+            t1 = Table(data1, colWidths=[100, 150, 100])
+            t1.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.darkgreen),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('GRID', (0,0), (-1,-1), 1, colors.black)
+            ]))
             elements.append(t1); elements.append(Spacer(1, 20))
             
             # Table 2: Donations Distributed
             grp = mem_info.get('group', 'Brother')
             don_df = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Year'] == year) & (self.df['Group'] == grp)]
             
-            elements.append(Paragraph(f"Donations Distributed to {grp}s", styles['Heading3']))
+            elements.append(Paragraph(f"Donations Distributed ({grp}s)", styles['Heading3']))
             data2 = [["Date", "Beneficiary", "Reason", "Amount"]]
             d_total = 0
             for _, r in don_df.iterrows():
@@ -578,14 +593,31 @@ class CharityApp:
             data2.append(["", "", "TOTAL:", f"{d_total:.2f}"])
             
             t2 = Table(data2, colWidths=[80, 120, 150, 80])
-            t2.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.darkred), ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke), ('GRID',(0,0),(-1,-1),1,colors.black)]))
+            t2.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), ('GRID', (0,0), (-1,-1), 1, colors.black), ('FONTSIZE', (0,0), (-1,-1), 8)]))
             elements.append(t2)
             
+            # Footer
+            elements.append(Spacer(1, 30))
+            elements.append(Paragraph(self.txt_footer.get("1.0", "end-1c"), styles['Normal']))
+            elements.append(Spacer(1, 20))
+            elements.append(Paragraph("_______________________", styles['Normal']))
+            elements.append(Paragraph("Authorized Signature", styles['Normal']))
+            
             doc.build(elements)
-            messagebox.showinfo("Success", "PDF Created!")
+            messagebox.showinfo("Success", f"PDF Saved: {fname}")
             
         except Exception as e:
             messagebox.showerror("PDF Error", str(e))
+
+    def refresh_tables(self):
+        # Refresh Last 5
+        for i in self.tree_last5.get_children(): self.tree_last5.delete(i)
+        rec = self.df.tail(5)
+        for _, r in rec.iloc[::-1].iterrows():
+            self.tree_last5.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], f"{r['Amount']:.2f}"))
+            
+        self.refresh_log()
+        self.refresh_donations()
 
 if __name__ == "__main__":
     root = tk.Tk()
