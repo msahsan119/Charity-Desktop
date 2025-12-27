@@ -163,7 +163,7 @@ class CharityApp:
         
         
 
-    # --- TAB 1: TRANSACTION ---
+    # --- TAB 2: TRANSACTION ---
     def setup_transaction_tab(self):
         main = ttk.Frame(self.tab_trans)
         main.pack(fill="both", expand=True, padx=20, pady=20)
@@ -252,7 +252,7 @@ class CharityApp:
             messagebox.showinfo("Success", "Transaction Saved")
         except ValueError: messagebox.showerror("Error", "Invalid Amount")
 
-    # --- TAB 7: MATRIX ---
+    # --- TAB 4: MATRIX ---
     def setup_overall_contribution_tab(self):
         ctrl = tk.Frame(self.tab_matrix); ctrl.pack(fill="x", padx=10, pady=5)
         tk.Label(ctrl, text="Filter Year:").pack(side="left")
@@ -334,7 +334,7 @@ class CharityApp:
         for i in self.tree_mems.get_children(): self.tree_mems.delete(i)
         for name, data in self.members_db.items(): self.tree_mems.insert("", "end", values=(name, data.get("group"), data.get("phone"), data.get("email")))
 
-    # --- TAB 2: LOG ---
+    # --- TAB 3: LOG ---
     def setup_log_tab(self):
         f = tk.Frame(self.tab_log); f.pack(fill="x", padx=10, pady=5)
         self.log_yr = ttk.Combobox(f, values=["All"] + YEARS, width=6); self.log_yr.set("All"); self.log_yr.pack(side="left")
@@ -368,7 +368,7 @@ class CharityApp:
             self.tree_log.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], sub, f"{r['Amount']:.2f}", r['ID']))
         self.refresh_donations()
 
-    # --- TAB 3: DONATION ---
+    # --- TAB 5: DONATION ---
     def setup_donation_tab(self):
         f = tk.Frame(self.tab_don); f.pack(fill="x", padx=10, pady=5)
         ttk.Button(f, text="Refresh", command=self.refresh_tables).pack(side="left")
@@ -383,7 +383,7 @@ class CharityApp:
         for _, r in don_df.iterrows():
              self.tree_don.insert("", "end", values=(r['Date'], r['Name_Details'], r['Category'], r['SubCategory'], f"{r['Amount']:.2f}"))
 
-    # --- TAB 4: ANALYSIS ---
+    # --- TAB 6: ANALYSIS ---
     def setup_analysis_tab(self):
         f = tk.Frame(self.tab_ana); f.pack(fill="both", expand=True, padx=10, pady=10)
         self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=(10, 5))
@@ -403,7 +403,7 @@ class CharityApp:
             self.ax2.pie(og, labels=og.index, autopct='%1.1f%%'); self.ax2.set_title("Donations")
         self.canvas.draw()
 
-    # --- TAB 5: REPORTS ---
+    # --- TAB 7: REPORTS ---
     def setup_report_tab(self):
         f = tk.Frame(self.tab_rep); f.pack(fill="x", padx=10, pady=10)
         tk.Label(f, text="Member:").pack(side="left")
