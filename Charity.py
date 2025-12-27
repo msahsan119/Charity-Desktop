@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import pandas as pd
 import json
 import os
@@ -24,11 +24,14 @@ except ImportError:
 # --- CONSTANTS ---
 DATA_FILE = "charity_data.csv"
 MEMBERS_FILE = "members.json"
+SETTINGS_FILE = "settings.json"
 CURRENCY = "€"
 
-INCOME_TYPES = ["Sadaka", "Zakat", "Fitra", "Iftar", "Scholarship", "General"]
-OUTGOING_TYPES = ["Medical help", "Financial help", "Karje hasana", "Mosque", "Dead body", "Scholarship"]
+# Default Defaults
+DEFAULT_INCOME = ["Sadaka", "Zakat", "Fitra", "Iftar", "Scholarship", "General"]
+DEFAULT_OUTGOING = ["Medical help", "Financial help", "Karje hasana", "Mosque", "Dead body", "Scholarship"]
 MEDICAL_SUB_TYPES = ["Heart", "Cancer", "Lung", "Brain", "Bone", "Other"]
+
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", 
                "July", "August", "September", "October", "November", "December"]
 YEARS = [str(y) for y in range(2023, 2101)]
@@ -40,40 +43,66 @@ HADITH_QUOTE = """The Prophet (peace and blessings of Allah be upon him) said: "
 class CharityApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Charity Management System - Desktop Edition")
+        self.root.title("Charity Management System - Professional Desktop Edition")
         
-        # Window State
         try:
             self.root.state('zoomed')
         except:
             self.root.geometry("1400x900")
         
-        # Initialize Data
+        # Load Data & Settings
+        self.load_settings()
         self.df = self.load_data()
         self.members_db = self.load_members()
         
-        # Styles
+        # UI Setup
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure("Treeview.Heading", font=('Arial', 9, 'bold'))
         style.configure("Treeview", rowheight=25)
         
-        # Layout
         self.create_dashboard_header()
         self.create_tabs()
         
         # Initial Refresh
         self.refresh_all_views()
 
-    # --- DATA HANDLING ---
+    # =========================================================================
+    # DATA & SETTINGS HANDLING
+    # =========================================================================
+    def load_settings(self):
+        """Loads custom categories or defaults"""
+        if os.path.exists(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, 'r') as f:
+                    data = json.load(f)
+                    self.income_cats = data.get("income", DEFAULT_INCOME)
+                    self.outgoing_cats = data.get("outgoing", DEFAULT_OUTGOING)
+            except:
+                self.income_cats = DEFAULT_INCOME
+                self.outgoing_cats = DEFAULT_OUTGOING
+        else:
+            self.income_cats = DEFAULT_INCOME
+            self.outgoing_cats = DEFAULT_OUTGOING
+
+    def save_settings(self):
+        """Saves current categories"""
+        data = {"income": self.income_cats, "outgoing": self.outgoing_cats}
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(data, f)
+        self.refresh_all_views()
+
     def load_data(self):
         cols = ["ID", "Date", "Year", "Month", "Type", "Group", "Name_Details", 
                 "Address", "Reason", "Responsible", "Category", "SubCategory", "Medical", "Amount"]
         if os.path.exists(DATA_FILE):
             try:
                 df = pd.read_csv(DATA_FILE)
+                # Ensure all columns exist
                 for c in cols:
                     if c not in df.columns: df[c] = ""
+                
+                # FIX: Fill NaN with empty strings to prevent dtype errors
+                df = df.fillna("")
                 return df
             except: pass
         return pd.DataFrame(columns=cols)
@@ -101,20 +130,94 @@ class CharityApp:
         return inc - out
 
     def refresh_all_views(self):
+        """Updates entire UI, dropdowns, and charts"""
+        # Update Dropdown values from Settings
+        self.ent_inc_cat_manage['values'] = self.income_cats
+        self.out_fund['values'] = self.income_cats
+        self.ent_out_cat_manage['values'] = self.outgoing_cats
+        
         self.refresh_dashboard()
         self.update_member_dropdown()
         self.refresh_member_list_tab()
-        self.refresh_tables()
+        self.refresh_tables() 
+        self.plot_analysis()
         if hasattr(self, 'tree_matrix'): self.generate_matrix_report()
 
-    # --- UI LAYOUT ---
+    # =========================================================================
+    # UI COMPONENTS
+    # =========================================================================
     def create_dashboard_header(self):
         frame = tk.Frame(self.root, bg="#f0f0f0", bd=2, relief=tk.RAISED)
         frame.pack(side=tk.TOP, fill=tk.X)
+        
         self.lbl_stats = tk.Label(frame, text="Loading...", font=("Arial", 12, "bold"), bg="#f0f0f0", fg="#333")
         self.lbl_stats.pack(side=tk.LEFT, padx=20, pady=10)
+        
+        tk.Button(frame, text="⚙️ Manage Categories", command=self.open_category_manager, bg="#e1e1e1").pack(side=tk.RIGHT, padx=10, pady=5)
+        
         self.lbl_funds = tk.Label(frame, text="", font=("Consolas", 10), bg="#f0f0f0", fg="#006400")
         self.lbl_funds.pack(side=tk.RIGHT, padx=20, pady=10)
+
+    def open_category_manager(self):
+        """Popup to Add/Edit/Delete Categories and auto-update DB"""
+        top = tk.Toplevel(self.root)
+        top.title("Manage Categories")
+        top.geometry("600x450")
+        
+        nb = ttk.Notebook(top)
+        nb.pack(fill="both", expand=True, padx=10, pady=10)
+        f_inc = tk.Frame(nb); nb.add(f_inc, text="Incoming Categories")
+        f_out = tk.Frame(nb); nb.add(f_out, text="Usage/Outgoing Types")
+        
+        def build_ui(frame, current_list, list_type, db_col_name):
+            lb = tk.Listbox(frame)
+            lb.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+            for item in current_list: lb.insert(tk.END, item)
+            
+            btn_f = tk.Frame(frame); btn_f.pack(side="right", fill="y")
+            
+            def add_item():
+                new_cat = simpledialog.askstring("New", f"Enter new {list_type} category:")
+                if new_cat and new_cat not in current_list:
+                    current_list.append(new_cat)
+                    self.save_settings()
+                    lb.insert(tk.END, new_cat)
+            
+            def edit_item():
+                sel = lb.curselection()
+                if sel:
+                    old_val = lb.get(sel[0])
+                    new_val = simpledialog.askstring("Edit", f"Rename '{old_val}' to:")
+                    if new_val and new_val != old_val:
+                        # Update List
+                        current_list[sel[0]] = new_val
+                        self.save_settings()
+                        lb.delete(sel[0])
+                        lb.insert(sel[0], new_val)
+                        
+                        # Update Database
+                        if not self.df.empty:
+                            count = self.df[self.df[db_col_name] == old_val].shape[0]
+                            self.df.loc[self.df[db_col_name] == old_val, db_col_name] = new_val
+                            self.save_data()
+                            messagebox.showinfo("Updated", f"Updated {count} past transactions to '{new_val}'")
+
+            def del_item():
+                sel = lb.curselection()
+                if sel:
+                    val = lb.get(sel[0])
+                    if messagebox.askyesno("Delete", f"Remove '{val}'?"):
+                        current_list.remove(val)
+                        self.save_settings()
+                        lb.delete(sel[0])
+
+            tk.Button(btn_f, text="Add New", command=add_item).pack(fill="x", pady=5)
+            tk.Button(btn_f, text="Edit & Update DB", command=edit_item).pack(fill="x", pady=5)
+            tk.Button(btn_f, text="Delete", command=del_item).pack(fill="x", pady=5)
+
+        # Incoming maps to 'Category' col, Outgoing maps to 'SubCategory' col
+        build_ui(f_inc, self.income_cats, "Incoming", "Category")
+        build_ui(f_out, self.outgoing_cats, "Outgoing", "SubCategory")
 
     def refresh_dashboard(self):
         if self.df.empty: 
@@ -133,7 +236,7 @@ class CharityApp:
         self.lbl_stats.config(text=stats_text, fg="darkblue")
         
         fund_txt = "BALANCES: "
-        for cat in INCOME_TYPES:
+        for cat in self.income_cats: # Use dynamic list
             bal = self.get_fund_balance(cat)
             fund_txt += f"{cat}: {CURRENCY}{bal:,.2f} | "
         self.lbl_funds.config(text=fund_txt)
@@ -142,50 +245,50 @@ class CharityApp:
         nb = ttk.Notebook(self.root)
         nb.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # FIX: Explicitly naming attributes to match setup functions
         self.tab_mem = ttk.Frame(nb); nb.add(self.tab_mem, text="1. Member Management")
-        self.tab_trans = ttk.Frame(nb); nb.add(self.tab_trans, text="2. Transaction Entry")
+        self.tab_trans = ttk.Frame(nb); nb.add(self.tab_trans, text="2. Transaction")
         self.tab_log = ttk.Frame(nb); nb.add(self.tab_log, text="3. Activity Log")
-        self.tab_matrix = ttk.Frame(nb); nb.add(self.tab_matrix, text="4. Member Overall Contribution")
+        self.tab_matrix = ttk.Frame(nb); nb.add(self.tab_matrix, text="4. Overall Matrix")
         self.tab_don = ttk.Frame(nb); nb.add(self.tab_don, text="5. Donation List")
         self.tab_ana = ttk.Frame(nb); nb.add(self.tab_ana, text="6. Analysis")
         self.tab_rep = ttk.Frame(nb); nb.add(self.tab_rep, text="7. Member Reports")
         
         
         
-        self.setup_member_tab()
         self.setup_transaction_tab()
         self.setup_log_tab()
-        self.setup_overall_contribution_tab()
         self.setup_donation_tab()
         self.setup_analysis_tab()
         self.setup_report_tab()
-        
-        
+        self.setup_member_tab()
+        self.setup_overall_contribution_tab()
 
-    # --- TAB 2: TRANSACTION ---
+    # --- TAB 1: TRANSACTION ---
     def setup_transaction_tab(self):
         main = ttk.Frame(self.tab_trans)
         main.pack(fill="both", expand=True, padx=20, pady=20)
         
+        # Type
         type_frame = ttk.LabelFrame(main, text="Transaction Type")
         type_frame.pack(fill="x", pady=5)
         self.var_type = tk.StringVar(value="Incoming")
         ttk.Radiobutton(type_frame, text="INCOMING (Collection)", variable=self.var_type, value="Incoming", command=self.update_form_view).pack(side="left", padx=20, pady=10)
         ttk.Radiobutton(type_frame, text="OUTGOING (Donation)", variable=self.var_type, value="Outgoing", command=self.update_form_view).pack(side="left", padx=20, pady=10)
         
+        # Details
         common_frame = ttk.LabelFrame(main, text="Details")
         common_frame.pack(fill="x", pady=5)
         f1 = tk.Frame(common_frame); f1.pack(fill="x", padx=10, pady=5)
-        tk.Label(f1, text="Year:").pack(side="left")
-        self.ent_year = ttk.Combobox(f1, values=YEARS, width=5); self.ent_year.set(datetime.now().year); self.ent_year.pack(side="left", padx=5)
-        tk.Label(f1, text="Month:").pack(side="left")
-        self.ent_month = ttk.Combobox(f1, values=MONTH_NAMES, width=10); self.ent_month.set(MONTH_NAMES[datetime.now().month-1]); self.ent_month.pack(side="left", padx=5)
-        tk.Label(f1, text="Day:").pack(side="left")
-        self.ent_day = ttk.Spinbox(f1, from_=1, to=31, width=3); self.ent_day.set(datetime.now().day); self.ent_day.pack(side="left", padx=5)
+        
+        tk.Label(f1, text="Date (D/M/Y):").pack(side="left")
+        self.ent_day = ttk.Spinbox(f1, from_=1, to=31, width=3); self.ent_day.set(datetime.now().day); self.ent_day.pack(side="left")
+        self.ent_month = ttk.Combobox(f1, values=MONTH_NAMES, width=10); self.ent_month.set(MONTH_NAMES[datetime.now().month-1]); self.ent_month.pack(side="left")
+        self.ent_year = ttk.Combobox(f1, values=YEARS, width=5); self.ent_year.set(datetime.now().year); self.ent_year.pack(side="left")
+        
         tk.Label(f1, text=f"Amount ({CURRENCY}):", font=("Arial", 10, "bold")).pack(side="left", padx=20)
         self.ent_amt = ttk.Entry(f1, width=15); self.ent_amt.pack(side="left")
 
+        # Dynamic Frames
         self.f_incoming = tk.Frame(common_frame)
         self.f_outgoing = tk.Frame(common_frame)
         
@@ -194,25 +297,53 @@ class CharityApp:
         self.var_inc_grp = tk.StringVar(value="Brother")
         tk.Radiobutton(self.f_incoming, text="Brother", variable=self.var_inc_grp, value="Brother", command=self.update_member_dropdown).grid(row=0, column=1)
         tk.Radiobutton(self.f_incoming, text="Sister", variable=self.var_inc_grp, value="Sister", command=self.update_member_dropdown).grid(row=0, column=2)
+        
         tk.Label(self.f_incoming, text="Member Name:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.ent_inc_name = ttk.Combobox(self.f_incoming, width=30)
         self.ent_inc_name.grid(row=1, column=1, columnspan=2, padx=5, pady=5)
+        
         tk.Label(self.f_incoming, text="Category:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.ent_inc_cat = ttk.Combobox(self.f_incoming, values=INCOME_TYPES, width=30); self.ent_inc_cat.grid(row=2, column=1, columnspan=2, padx=5, pady=5)
+        # Store reference to this combobox to update it later
+        self.ent_inc_cat_manage = ttk.Combobox(self.f_incoming, values=self.income_cats, width=30)
+        self.ent_inc_cat = self.ent_inc_cat_manage 
+        self.ent_inc_cat.grid(row=2, column=1, columnspan=2, padx=5, pady=5)
         
         # OUTGOING
         tk.Label(self.f_outgoing, text="Beneficiary Name:").grid(row=0, column=0, sticky="w"); self.out_ben = ttk.Entry(self.f_outgoing, width=25); self.out_ben.grid(row=0, column=1, padx=5, pady=2)
         tk.Label(self.f_outgoing, text="Address:").grid(row=0, column=2, sticky="w"); self.out_addr = ttk.Entry(self.f_outgoing, width=25); self.out_addr.grid(row=0, column=3, padx=5, pady=2)
+        
         tk.Label(self.f_outgoing, text="Responsible Person:").grid(row=1, column=0, sticky="w"); self.out_resp = ttk.Combobox(self.f_outgoing, width=22); self.out_resp.grid(row=1, column=1, padx=5, pady=2)
         tk.Label(self.f_outgoing, text="Reason/Note:").grid(row=1, column=2, sticky="w"); self.out_reason = ttk.Entry(self.f_outgoing, width=25); self.out_reason.grid(row=1, column=3, padx=5, pady=2)
+
         tk.Label(self.f_outgoing, text="Group:").grid(row=2, column=0, sticky="w"); self.out_grp = ttk.Combobox(self.f_outgoing, values=["Brother", "Sister"], width=22); self.out_grp.grid(row=2, column=1, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Fund Source:").grid(row=2, column=2, sticky="w"); self.out_fund = ttk.Combobox(self.f_outgoing, values=INCOME_TYPES, width=22); self.out_fund.grid(row=2, column=3, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Usage Type:").grid(row=3, column=0, sticky="w"); self.out_use = ttk.Combobox(self.f_outgoing, values=OUTGOING_TYPES, width=22); self.out_use.grid(row=3, column=1, padx=5, pady=2)
+        tk.Label(self.f_outgoing, text="Fund Source:").grid(row=2, column=2, sticky="w"); 
+        self.out_fund = ttk.Combobox(self.f_outgoing, values=self.income_cats, width=22)
+        self.out_fund.grid(row=2, column=3, padx=5, pady=2)
+        
+        tk.Label(self.f_outgoing, text="Usage Type:").grid(row=3, column=0, sticky="w")
+        self.ent_out_cat_manage = ttk.Combobox(self.f_outgoing, values=self.outgoing_cats, width=22)
+        self.out_use = self.ent_out_cat_manage
+        self.out_use.grid(row=3, column=1, padx=5, pady=2)
         self.out_use.bind("<<ComboboxSelected>>", self.check_medical)
+        
         self.lbl_med = tk.Label(self.f_outgoing, text="Condition:"); self.ent_med = ttk.Combobox(self.f_outgoing, values=MEDICAL_SUB_TYPES, width=22)
 
         ttk.Button(main, text="💾 SAVE TRANSACTION", command=self.submit_transaction).pack(pady=20)
+        
+        # Last 5
+        last5_frame = ttk.LabelFrame(main, text="Last 5 Entries (Double-click to Edit)")
+        last5_frame.pack(fill="both", expand=True)
+        cols = ("Date", "Type", "Name", "Category", "Amount", "ID")
+        self.tree_last5 = ttk.Treeview(last5_frame, columns=cols, show="headings", height=5)
+        for c in cols: 
+            self.tree_last5.heading(c, text=c)
+            if c == "ID": self.tree_last5.column(c, width=0, stretch=False)
+            else: self.tree_last5.column(c, width=120)
+        self.tree_last5.pack(fill="both", expand=True)
+        self.tree_last5.bind("<Double-1>", lambda e: self.open_edit_dialog(self.tree_last5))
+        
         self.update_form_view()
+        self.update_member_dropdown()
 
     def update_form_view(self):
         if self.var_type.get() == "Incoming":
@@ -227,7 +358,7 @@ class CharityApp:
 
     def update_member_dropdown(self):
         grp = self.var_inc_grp.get()
-        mems = [n for n, d in self.members_db.items() if data.get('group') == grp] if 'data' in locals() else [n for n, d in self.members_db.items() if d.get('group') == grp]
+        mems = [n for n, d in self.members_db.items() if d.get('group') == grp]
         self.ent_inc_name['values'] = sorted(mems)
 
     def submit_transaction(self):
@@ -237,20 +368,354 @@ class CharityApp:
             y, d = int(self.ent_year.get()), int(self.ent_day.get())
             m = MONTH_NAMES.index(self.ent_month.get()) + 1
             date_str = f"{y}-{m:02d}-{d:02d}"
-            row = {"ID": str(uuid.uuid4()), "Date": date_str, "Year": y, "Month": m, "Type": self.var_type.get(), "Amount": amt, "Name_Details": "", "Group": "", "Category": "", "SubCategory": "", "Medical": "", "Address": "", "Reason": "", "Responsible": ""}
+            
+            row = {
+                "ID": str(uuid.uuid4()), "Date": date_str, "Year": y, "Month": m,
+                "Type": self.var_type.get(), "Amount": amt,
+                "Name_Details": "", "Group": "", "Category": "", "SubCategory": "", "Medical": "", 
+                "Address": "", "Reason": "", "Responsible": ""
+            }
             
             if row['Type'] == "Incoming":
                 if not self.ent_inc_name.get(): return messagebox.showerror("Error", "Name required")
                 row.update({"Name_Details": self.ent_inc_name.get(), "Group": self.var_inc_grp.get(), "Category": self.ent_inc_cat.get()})
             else:
                 fund = self.out_fund.get()
-                if amt > self.get_fund_balance(fund): return messagebox.showerror("Error", f"Insufficient funds in {fund}")
-                row.update({"Name_Details": self.out_ben.get(), "Address": self.out_addr.get(), "Reason": self.out_reason.get(), "Responsible": self.out_resp.get(), "Group": self.out_grp.get(), "Category": fund, "SubCategory": self.out_use.get(), "Medical": self.ent_med.get()})
-            
+                bal = self.get_fund_balance(fund)
+                if amt > bal: return messagebox.showerror("Error", f"Insufficient funds in {fund}")
+                row.update({"Name_Details": self.out_ben.get(), "Address": self.out_addr.get(), "Reason": self.out_reason.get(),
+                    "Responsible": self.out_resp.get(), "Group": self.out_grp.get(), "Category": fund,
+                    "SubCategory": self.out_use.get(), "Medical": self.ent_med.get()})
+                
             self.df = pd.concat([self.df, pd.DataFrame([row])], ignore_index=True)
             self.save_data()
             messagebox.showinfo("Success", "Transaction Saved")
+            
         except ValueError: messagebox.showerror("Error", "Invalid Amount")
+
+    # --- ADVANCED UNIVERSAL EDIT DIALOG ---
+    def open_edit_dialog(self, tree_widget):
+        sel = tree_widget.selection()
+        if not sel: return
+        
+        values = tree_widget.item(sel[0])['values']
+        poss_id = str(values[-1])
+        record = self.df[self.df['ID'] == poss_id]
+        if record.empty: return
+        rec = record.iloc[0]
+        
+        top = tk.Toplevel(self.root); top.title("Edit Transaction"); top.geometry("500x650")
+        f = tk.Frame(top, padx=20, pady=20); f.pack()
+        
+        tk.Label(f, text=f"EDIT: {rec['Type']}", font=("Arial", 12, "bold")).grid(row=0, columnspan=2, pady=10)
+        
+        tk.Label(f, text="Date (Y-M-D):").grid(row=1, column=0); e_date = tk.Entry(f); e_date.insert(0, rec['Date']); e_date.grid(row=1, column=1)
+        tk.Label(f, text="Amount:").grid(row=2, column=0); e_amt = tk.Entry(f); e_amt.insert(0, rec['Amount']); e_amt.grid(row=2, column=1)
+        
+        # Dynamic Widgets Holder
+        e_name = None; e_name_cb = None; e_cat = None; e_fund = None; e_sub = None; e_med = None; e_addr = None; e_reason = None; e_resp = None
+        
+        if rec['Type'] == 'Incoming':
+            tk.Label(f, text="Member Name:").grid(row=3, column=0)
+            e_name_cb = ttk.Combobox(f, values=list(self.members_db.keys()), width=25)
+            e_name_cb.set(rec['Name_Details']); e_name_cb.grid(row=3, column=1)
+            
+            tk.Label(f, text="Category:").grid(row=4, column=0)
+            e_cat = ttk.Combobox(f, values=self.income_cats, width=25)
+            e_cat.set(rec['Category']); e_cat.grid(row=4, column=1)
+            
+        else: # Outgoing
+            tk.Label(f, text="Beneficiary Name:").grid(row=3, column=0)
+            e_name = tk.Entry(f, width=28); e_name.insert(0, rec['Name_Details']); e_name.grid(row=3, column=1)
+            
+            tk.Label(f, text="Fund Source:").grid(row=4, column=0)
+            e_fund = ttk.Combobox(f, values=self.income_cats, width=25); e_fund.set(rec['Category']); e_fund.grid(row=4, column=1)
+            
+            tk.Label(f, text="Usage Type:").grid(row=5, column=0)
+            e_sub = ttk.Combobox(f, values=self.outgoing_cats, width=25); e_sub.set(rec['SubCategory']); e_sub.grid(row=5, column=1)
+            
+            tk.Label(f, text="Address:").grid(row=6, column=0)
+            e_addr = tk.Entry(f, width=28); e_addr.insert(0, rec['Address']); e_addr.grid(row=6, column=1)
+            
+            tk.Label(f, text="Responsible:").grid(row=7, column=0)
+            e_resp = ttk.Combobox(f, values=sorted(list(self.members_db.keys())), width=25); e_resp.set(rec['Responsible']); e_resp.grid(row=7, column=1)
+
+            tk.Label(f, text="Medical:").grid(row=8, column=0)
+            e_med = tk.Entry(f, width=28); e_med.insert(0, rec['Medical']); e_med.grid(row=8, column=1)
+
+            tk.Label(f, text="Reason:").grid(row=9, column=0)
+            e_reason = tk.Entry(f, width=28); e_reason.insert(0, rec['Reason']); e_reason.grid(row=9, column=1)
+        
+        def save_edit():
+            try:
+                amt = float(e_amt.get())
+                dt = datetime.strptime(e_date.get(), "%Y-%m-%d")
+                idx = self.df[self.df['ID'] == rec['ID']].index[0]
+                
+                self.df.at[idx, 'Amount'] = amt
+                self.df.at[idx, 'Date'] = e_date.get()
+                self.df.at[idx, 'Year'] = dt.year
+                self.df.at[idx, 'Month'] = dt.month
+                
+                if rec['Type'] == 'Incoming':
+                    self.df.at[idx, 'Name_Details'] = e_name_cb.get()
+                    self.df.at[idx, 'Category'] = e_cat.get()
+                else:
+                    self.df.at[idx, 'Name_Details'] = e_name.get()
+                    self.df.at[idx, 'Category'] = e_fund.get()
+                    self.df.at[idx, 'SubCategory'] = e_sub.get()
+                    self.df.at[idx, 'Address'] = e_addr.get()
+                    self.df.at[idx, 'Responsible'] = e_resp.get()
+                    self.df.at[idx, 'Medical'] = e_med.get()
+                    self.df.at[idx, 'Reason'] = e_reason.get()
+                
+                self.save_data()
+                top.destroy()
+                messagebox.showinfo("Updated", "Record updated.")
+            except: messagebox.showerror("Error", "Invalid Format")
+
+        def delete_rec():
+            if messagebox.askyesno("Delete", "Delete this record?"):
+                self.df = self.df[self.df['ID'] != rec['ID']]
+                self.save_data()
+                top.destroy()
+
+        ttk.Button(f, text="Update", command=save_edit).grid(row=11, column=0, pady=20)
+        ttk.Button(f, text="Delete", command=delete_rec).grid(row=11, column=1, pady=20)
+
+    # --- TAB 3: LOG ---
+    def setup_log_tab(self):
+        f = tk.Frame(self.tab_log); f.pack(fill="x", padx=10, pady=5)
+        self.log_yr = ttk.Combobox(f, values=["All"] + YEARS, width=6); self.log_yr.set("All"); self.log_yr.pack(side="left")
+        self.log_type = ttk.Combobox(f, values=["All", "Incoming", "Outgoing"], width=10); self.log_type.set("All"); self.log_type.pack(side="left", padx=5)
+        ttk.Button(f, text="Refresh", command=self.refresh_tables).pack(side="left")
+        
+        cols = ("Date", "Type", "Name", "Category", "Sub/Med", "Amount", "ID")
+        self.tree_log = ttk.Treeview(self.tab_log, columns=cols, show="headings")
+        for c in cols: 
+            self.tree_log.heading(c, text=c)
+            if c == "ID": self.tree_log.column(c, width=0, stretch=False)
+            else: self.tree_log.column(c, width=100)
+        self.tree_log.pack(fill="both", expand=True, padx=10)
+        self.tree_log.bind("<Double-1>", lambda e: self.open_edit_dialog(self.tree_log))
+
+    def refresh_tables(self):
+        # Refresh Log
+        for i in self.tree_log.get_children(): self.tree_log.delete(i)
+        yr = self.log_yr.get(); v = self.df.copy()
+        if yr != "All": v = v[v['Year'] == int(yr)]
+        if self.log_type.get() != "All": v = v[v['Type'] == self.log_type.get()]
+        
+        for _, r in v.iterrows():
+            sub = r['SubCategory'] if r['Type'] == 'Outgoing' else ""
+            if r['Medical']: sub += f" ({r['Medical']})"
+            self.tree_log.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], sub, f"{r['Amount']:.2f}", r['ID']))
+        
+        # Refresh Donation
+        self.refresh_donations()
+        
+        # Refresh Last 5
+        for i in self.tree_last5.get_children(): self.tree_last5.delete(i)
+        for _, r in self.df.tail(5).iloc[::-1].iterrows():
+             self.tree_last5.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], f"{r['Amount']:.2f}", r['ID']))
+
+    # --- TAB 5: DONATION ---
+    def setup_donation_tab(self):
+        f = tk.Frame(self.tab_don); f.pack(fill="x", padx=10, pady=5)
+        ttk.Button(f, text="Refresh", command=self.refresh_tables).pack(side="left")
+        cols = ("Date", "Beneficiary", "Category", "Sub", "Amount", "ID")
+        self.tree_don = ttk.Treeview(self.tab_don, columns=cols, show="headings")
+        for c in cols: 
+            self.tree_don.heading(c, text=c)
+            if c == "ID": self.tree_don.column(c, width=0, stretch=False)
+        self.tree_don.pack(fill="both", expand=True, padx=10)
+        self.tree_don.bind("<Double-1>", lambda e: self.open_edit_dialog(self.tree_don))
+
+    def refresh_donations(self):
+        for i in self.tree_don.get_children(): self.tree_don.delete(i)
+        don_df = self.df[self.df['Type'] == 'Outgoing']
+        for _, r in don_df.iterrows():
+             self.tree_don.insert("", "end", values=(r['Date'], r['Name_Details'], r['Category'], r['SubCategory'], f"{r['Amount']:.2f}", r['ID']))
+
+    # --- TAB 6: ANALYSIS ---
+    def setup_analysis_tab(self):
+        ctrl = tk.Frame(self.tab_ana); ctrl.pack(fill="x", padx=10, pady=5)
+        tk.Label(ctrl, text="Filter Year:").pack(side="left")
+        self.ana_yr = ttk.Combobox(ctrl, values=["All"] + YEARS, width=6); self.ana_yr.set("All"); self.ana_yr.pack(side="left")
+        
+        tk.Label(ctrl, text="Chart:").pack(side="left", padx=10)
+        self.ana_chart = ttk.Combobox(ctrl, values=["Income Breakdown", "Donation Usage", "Medical Breakdown"], width=20)
+        self.ana_chart.current(0); self.ana_chart.pack(side="left")
+        
+        ttk.Button(ctrl, text="Update Chart", command=self.plot_analysis).pack(side="left", padx=10)
+
+        f = tk.Frame(self.tab_ana); f.pack(fill="both", expand=True, padx=10, pady=10)
+        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=f)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    def plot_analysis(self):
+        self.ax.clear()
+        chart = self.ana_chart.get()
+        yr = self.ana_yr.get()
+        df_a = self.df.copy()
+        if yr != "All": df_a = df_a[df_a['Year'] == int(yr)]
+        
+        data = None; title = ""
+        
+        if chart == "Income Breakdown":
+            data = df_a[df_a['Type'] == "Incoming"].groupby("Category")['Amount'].sum()
+            title = "Income Sources"
+        elif chart == "Donation Usage":
+            data = df_a[df_a['Type'] == "Outgoing"].groupby("SubCategory")['Amount'].sum()
+            title = "Donation Distribution"
+        elif chart == "Medical Breakdown":
+            out = df_a[df_a['Type'] == "Outgoing"]
+            data = out[out['SubCategory'] == "Medical help"].groupby("Medical")['Amount'].sum()
+            title = "Medical Details"
+            
+        if data is not None and not data.empty:
+            self.ax.pie(data, labels=data.index, autopct='%1.1f%%')
+            self.ax.set_title(title)
+        else: self.ax.text(0.5, 0.5, "No Data", ha='center')
+        self.canvas.draw()
+
+    # --- TAB 7: REPORTS ---
+    def setup_report_tab(self):
+        f = tk.Frame(self.tab_rep); f.pack(fill="x", padx=10, pady=10)
+        tk.Label(f, text="Member:").pack(side="left")
+        self.rep_mem = ttk.Combobox(f, width=20); self.rep_mem.pack(side="left", padx=5)
+        self.rep_mem.bind("<Button-1>", lambda e: self.update_rep_dropdown())
+        tk.Label(f, text="Year:").pack(side="left")
+        self.rep_yr = ttk.Combobox(f, values=YEARS, width=6); self.rep_yr.set(str(datetime.now().year)); self.rep_yr.pack(side="left")
+        ttk.Button(f, text="Generate PDF", command=self.generate_report_pdf).pack(side="left", padx=20)
+        
+        msg_frame = tk.LabelFrame(self.tab_rep, text="PDF Messages")
+        msg_frame.pack(fill="x", padx=10)
+        self.txt_header = tk.Text(msg_frame, height=20); self.txt_header.pack(fill="x"); self.txt_header.insert("1.0", "We appreciate your contribution.")
+        self.txt_footer = tk.Text(msg_frame, height=20); self.txt_footer.pack(fill="x"); self.txt_footer.insert("1.0", "Contact admin for queries.")
+
+    def update_rep_dropdown(self):
+        mems = sorted(list(self.members_db.keys()))
+        self.rep_mem['values'] = mems
+
+    def generate_report_pdf(self):
+        if not HAS_PDF: return messagebox.showerror("Error", "ReportLab not installed")
+        name = self.rep_mem.get(); year = int(self.rep_yr.get())
+        if not name: return
+        
+        mdf = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming') & (self.df['Year'] == year)]
+        mem_info = self.members_db.get(name, {})
+        fname = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=f"{name}_{year}.pdf")
+        if not fname: return
+        
+        try:
+            doc = SimpleDocTemplate(fname, pagesize=A4)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Styles
+            title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=20, textColor=colors.darkgreen)
+            header_style = ParagraphStyle('Header', parent=styles['Normal'], alignment=TA_CENTER, fontSize=12)
+            quote_style = ParagraphStyle('Quote', parent=styles['Italic'], textColor=colors.darkblue)
+            
+            # Header
+            elements.append(Paragraph("Bismillah hir Rahmanir Rahim", header_style))
+            elements.append(Paragraph("Sadaka Group Berlin", title_style))
+            elements.append(Paragraph("Member Contribution Report", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            # Quotes
+            elements.append(Paragraph(QURAN_QUOTE, quote_style))
+            elements.append(Spacer(1, 5))
+            elements.append(Paragraph(HADITH_QUOTE, quote_style))
+            elements.append(Spacer(1, 5))
+            
+            #elements.append(Paragraph("Charity Report", styles['Title']))
+            elements.append(Paragraph(f"Member: {name} | Phone: {mem_info.get('phone','-')} | Address: {mem_info.get('address','-')}", styles['Normal'])); elements.append(Spacer(1, 15))
+            
+            elements.append(Paragraph(self.txt_header.get("1.0", "end-1c"), styles['Italic'])); elements.append(Spacer(1, 15))
+            
+            elements.append(Paragraph(f"Contributions in {year}", styles['Heading3']))
+            data1 = [["Date", "Category", "Amount"]]; total = 0
+            for _, r in mdf.iterrows():
+                data1.append([r['Date'], r['Category'], f"{r['Amount']:.2f}"]); total += r['Amount']
+            data1.append(["", "TOTAL:", f"{total:.2f}"])
+            t1 = Table(data1, colWidths=[100, 150, 100]); t1.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black)]))
+            elements.append(t1); elements.append(Spacer(1, 20))
+            
+            grp = mem_info.get('group', 'Brother')
+            don_df = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Year'] == year) & (self.df['Group'] == grp)].sort_values('Month')
+            elements.append(Paragraph(f"Donations Distributed ({grp}s)", styles['Heading3']))
+            data2 = [["Date", "Beneficiary", "Reason", "Amount"]]
+            for _, r in don_df.iterrows():
+                data2.append([r['Date'], r['Name_Details'], r['Reason'], f"{r['Amount']:.2f}"])
+            t2 = Table(data2, colWidths=[80, 120, 150, 80]); t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black)]))
+            elements.append(t2)
+            
+           # Footer
+            elements.append(Spacer(1, 30))
+            elements.append(Paragraph(self.txt_footer.get("1.0", "end-1c"), styles['Normal']))
+            elements.append(Spacer(1, 20))
+            elements.append(Paragraph("_______________________", styles['Normal']))
+            elements.append(Paragraph("Authorized Signature", styles['Normal']))
+            
+            doc.build(elements)
+            messagebox.showinfo("Success", f"PDF Saved")
+        except Exception as e: messagebox.showerror("PDF Error", str(e))
+
+    # --- TAB 1: MEMBER MANAGEMENT ---
+    def setup_member_tab(self):
+        paned = tk.PanedWindow(self.tab_mem, orient=tk.HORIZONTAL)
+        paned.pack(fill="both", expand=True, padx=10, pady=10)
+        left_f = tk.LabelFrame(paned, text="Register / Edit Member", padx=10, pady=10)
+        right_f = tk.LabelFrame(paned, text="Registered Members List", padx=10, pady=10)
+        paned.add(left_f, width=400); paned.add(right_f)
+        
+        tk.Label(left_f, text="Full Name:").pack(anchor="w"); self.mem_name = ttk.Entry(left_f); self.mem_name.pack(fill="x")
+        tk.Label(left_f, text="Member ID (Optional):").pack(anchor="w"); self.mem_id = ttk.Entry(left_f); self.mem_id.pack(fill="x")
+        tk.Label(left_f, text="Group:").pack(anchor="w", pady=(10, 0)); self.mem_grp = tk.StringVar(value="Brother"); ttk.Radiobutton(left_f, text="Brother", variable=self.mem_grp, value="Brother").pack(anchor="w"); ttk.Radiobutton(left_f, text="Sister", variable=self.mem_grp, value="Sister").pack(anchor="w")
+        tk.Label(left_f, text="Phone:").pack(anchor="w", pady=(10,0)); self.mem_phone = ttk.Entry(left_f); self.mem_phone.pack(fill="x")
+        tk.Label(left_f, text="Email:").pack(anchor="w"); self.mem_email = ttk.Entry(left_f); self.mem_email.pack(fill="x")
+        tk.Label(left_f, text="Address:").pack(anchor="w"); self.mem_addr = ttk.Entry(left_f); self.mem_addr.pack(fill="x")
+        btn_f = tk.Frame(left_f); btn_f.pack(pady=20, fill="x"); ttk.Button(btn_f, text="Save / Update", command=self.save_member).pack(side="left", fill="x", expand=True); ttk.Button(btn_f, text="Delete", command=self.delete_member).pack(side="right", fill="x", expand=True)
+
+        cols = ("Name", "ID", "Group", "Phone", "Email")
+        self.tree_mems = ttk.Treeview(right_f, columns=cols, show="headings")
+        for c in cols: self.tree_mems.heading(c, text=c)
+        self.tree_mems.column("Name", width=120)
+        self.tree_mems.pack(fill="both", expand=True)
+        self.tree_mems.bind("<Double-1>", self.load_member_to_edit)
+        self.refresh_member_list_tab()
+
+    def load_member_to_edit(self, event):
+        sel = self.tree_mems.selection()
+        if not sel: return
+        name = self.tree_mems.item(sel[0])['values'][0]
+        data = self.members_db.get(name, {})
+        self.mem_name.delete(0, tk.END); self.mem_name.insert(0, name)
+        self.mem_id.delete(0, tk.END); self.mem_id.insert(0, data.get('id', ''))
+        self.mem_grp.set(data.get('group', 'Brother'))
+        self.mem_phone.delete(0, tk.END); self.mem_phone.insert(0, data.get('phone', ''))
+        self.mem_email.delete(0, tk.END); self.mem_email.insert(0, data.get('email', ''))
+        self.mem_addr.delete(0, tk.END); self.mem_addr.insert(0, data.get('address', ''))
+
+    def save_member(self):
+        name = self.mem_name.get().strip()
+        if not name: return messagebox.showerror("Error", "Name required")
+        mid = self.mem_id.get().strip()
+        if not mid: mid = self.members_db.get(name, {}).get("id", str(uuid.uuid4())[:8])
+        self.members_db[name] = {"id": mid, "group": self.mem_grp.get(), "phone": self.mem_phone.get(), "email": self.mem_email.get(), "address": self.mem_addr.get(), "joined": datetime.now().strftime("%Y-%m-%d")}
+        self.save_members(); self.refresh_member_list_tab(); self.mem_name.delete(0, tk.END); self.mem_id.delete(0, tk.END); self.mem_phone.delete(0, tk.END); self.mem_email.delete(0, tk.END); self.mem_addr.delete(0, tk.END)
+        messagebox.showinfo("Success", "Member Saved")
+
+    def delete_member(self):
+        name = self.mem_name.get().strip()
+        if name in self.members_db: del self.members_db[name]; self.save_members(); self.refresh_member_list_tab(); self.mem_name.delete(0, tk.END)
+
+    def refresh_member_list_tab(self):
+        for i in self.tree_mems.get_children(): self.tree_mems.delete(i)
+        for name, data in self.members_db.items(): self.tree_mems.insert("", "end", values=(name, data.get("id"), data.get("group"), data.get("phone"), data.get("email")))
 
     # --- TAB 4: MATRIX ---
     def setup_overall_contribution_tab(self):
@@ -266,6 +731,8 @@ class CharityApp:
         for m in MONTH_NAMES: self.tree_matrix.heading(m, text=m[:3]); self.tree_matrix.column(m, width=60, anchor="center")
         self.tree_matrix.heading("TOTAL", text="Total"); self.tree_matrix.column("TOTAL", width=80, anchor="e")
         self.tree_matrix.pack(side="left", fill="both", expand=True, padx=10, pady=5)
+        vsb = ttk.Scrollbar(self.tab_matrix, orient="vertical", command=self.tree_matrix.yview)
+        self.tree_matrix.configure(yscrollcommand=vsb.set); vsb.pack(side="right", fill="y", pady=5)
 
     def generate_matrix_report(self):
         for i in self.tree_matrix.get_children(): self.tree_matrix.delete(i)
@@ -287,169 +754,6 @@ class CharityApp:
         for m_num in range(1, 13): footer.append(f"{monthly_totals[m_num]:,.0f}")
         footer.append(f"{grand_total:,.2f}")
         self.tree_matrix.insert("", "end", values=footer, tags=('bold',)); self.tree_matrix.tag_configure('bold', font=('Arial', 10, 'bold'), background='#e1e1e1')
-
-    # --- TAB 6: MEMBER MANAGEMENT ---
-    def setup_member_tab(self):
-        paned = tk.PanedWindow(self.tab_mem, orient=tk.HORIZONTAL)
-        paned.pack(fill="both", expand=True, padx=10, pady=10)
-        left_f = tk.LabelFrame(paned, text="Register / Edit Member", padx=10, pady=10)
-        right_f = tk.LabelFrame(paned, text="Registered Members List", padx=10, pady=10)
-        paned.add(left_f, width=400); paned.add(right_f)
-        tk.Label(left_f, text="Full Name:").pack(anchor="w"); self.mem_name = ttk.Entry(left_f); self.mem_name.pack(fill="x")
-        tk.Label(left_f, text="Group:").pack(anchor="w", pady=(10, 0)); self.mem_grp = tk.StringVar(value="Brother"); ttk.Radiobutton(left_f, text="Brother", variable=self.mem_grp, value="Brother").pack(anchor="w"); ttk.Radiobutton(left_f, text="Sister", variable=self.mem_grp, value="Sister").pack(anchor="w")
-        tk.Label(left_f, text="Phone:").pack(anchor="w", pady=(10,0)); self.mem_phone = ttk.Entry(left_f); self.mem_phone.pack(fill="x")
-        tk.Label(left_f, text="Email:").pack(anchor="w"); self.mem_email = ttk.Entry(left_f); self.mem_email.pack(fill="x")
-        tk.Label(left_f, text="Address:").pack(anchor="w"); self.mem_addr = ttk.Entry(left_f); self.mem_addr.pack(fill="x")
-        btn_f = tk.Frame(left_f); btn_f.pack(pady=20, fill="x"); ttk.Button(btn_f, text="Save / Update", command=self.save_member).pack(side="left", fill="x", expand=True); ttk.Button(btn_f, text="Delete", command=self.delete_member).pack(side="right", fill="x", expand=True)
-        cols = ("Name", "Group", "Phone", "Email")
-        self.tree_mems = ttk.Treeview(right_f, columns=cols, show="headings")
-        for c in cols: self.tree_mems.heading(c, text=c)
-        self.tree_mems.column("Name", width=150)
-        self.tree_mems.pack(fill="both", expand=True)
-        self.tree_mems.bind("<Double-1>", self.load_member_to_edit)
-        self.refresh_member_list_tab()
-
-    def load_member_to_edit(self, event):
-        sel = self.tree_mems.selection()
-        if not sel: return
-        name = self.tree_mems.item(sel[0])['values'][0]
-        data = self.members_db.get(name, {})
-        self.mem_name.delete(0, tk.END); self.mem_name.insert(0, name)
-        self.mem_grp.set(data.get('group', 'Brother'))
-        self.mem_phone.delete(0, tk.END); self.mem_phone.insert(0, data.get('phone', ''))
-        self.mem_email.delete(0, tk.END); self.mem_email.insert(0, data.get('email', ''))
-        self.mem_addr.delete(0, tk.END); self.mem_addr.insert(0, data.get('address', ''))
-
-    def save_member(self):
-        name = self.mem_name.get().strip()
-        if not name: return messagebox.showerror("Error", "Name required")
-        self.members_db[name] = {"id": self.members_db.get(name, {}).get("id", str(uuid.uuid4())[:8]), "group": self.mem_grp.get(), "phone": self.mem_phone.get(), "email": self.mem_email.get(), "address": self.mem_addr.get(), "joined": datetime.now().strftime("%Y-%m-%d")}
-        self.save_members(); self.refresh_member_list_tab(); self.mem_name.delete(0, tk.END); messagebox.showinfo("Success", "Member Saved")
-
-    def delete_member(self):
-        name = self.mem_name.get().strip()
-        if name in self.members_db: del self.members_db[name]; self.save_members(); self.refresh_member_list_tab(); self.mem_name.delete(0, tk.END)
-
-    def refresh_member_list_tab(self):
-        for i in self.tree_mems.get_children(): self.tree_mems.delete(i)
-        for name, data in self.members_db.items(): self.tree_mems.insert("", "end", values=(name, data.get("group"), data.get("phone"), data.get("email")))
-
-    # --- TAB 3: LOG ---
-    def setup_log_tab(self):
-        f = tk.Frame(self.tab_log); f.pack(fill="x", padx=10, pady=5)
-        self.log_yr = ttk.Combobox(f, values=["All"] + YEARS, width=6); self.log_yr.set("All"); self.log_yr.pack(side="left")
-        self.log_type = ttk.Combobox(f, values=["All", "Incoming", "Outgoing"], width=10); self.log_type.set("All"); self.log_type.pack(side="left", padx=5)
-        ttk.Button(f, text="Refresh", command=self.refresh_tables).pack(side="left")
-        ttk.Button(f, text="Delete Selected", command=self.delete_transaction).pack(side="right")
-        cols = ("Date", "Type", "Name", "Category", "Sub/Med", "Amount", "ID")
-        self.tree_log = ttk.Treeview(self.tab_log, columns=cols, show="headings")
-        for c in cols: 
-            self.tree_log.heading(c, text=c)
-            if c == "ID": self.tree_log.column(c, width=0, stretch=False)
-            else: self.tree_log.column(c, width=100)
-        self.tree_log.pack(fill="both", expand=True, padx=10)
-
-    def delete_transaction(self):
-        sel = self.tree_log.selection()
-        if not sel: return
-        if messagebox.askyesno("Confirm", "Delete selected transaction?"):
-            ids = [self.tree_log.item(i)['values'][-1] for i in sel]
-            self.df = self.df[~self.df['ID'].isin(ids)]
-            self.save_data()
-
-    def refresh_tables(self):
-        for i in self.tree_log.get_children(): self.tree_log.delete(i)
-        yr = self.log_yr.get()
-        v = self.df.copy()
-        if yr != "All": v = v[v['Year'] == int(yr)]
-        for _, r in v.iterrows():
-            sub = r['SubCategory'] if r['Type'] == 'Outgoing' else ""
-            if r['Medical']: sub += f" ({r['Medical']})"
-            self.tree_log.insert("", "end", values=(r['Date'], r['Type'], r['Name_Details'], r['Category'], sub, f"{r['Amount']:.2f}", r['ID']))
-        self.refresh_donations()
-
-    # --- TAB 5: DONATION ---
-    def setup_donation_tab(self):
-        f = tk.Frame(self.tab_don); f.pack(fill="x", padx=10, pady=5)
-        ttk.Button(f, text="Refresh", command=self.refresh_tables).pack(side="left")
-        cols = ("Date", "Beneficiary", "Category", "Sub", "Amount")
-        self.tree_don = ttk.Treeview(self.tab_don, columns=cols, show="headings")
-        for c in cols: self.tree_don.heading(c, text=c)
-        self.tree_don.pack(fill="both", expand=True, padx=10)
-
-    def refresh_donations(self):
-        for i in self.tree_don.get_children(): self.tree_don.delete(i)
-        don_df = self.df[self.df['Type'] == 'Outgoing']
-        for _, r in don_df.iterrows():
-             self.tree_don.insert("", "end", values=(r['Date'], r['Name_Details'], r['Category'], r['SubCategory'], f"{r['Amount']:.2f}"))
-
-    # --- TAB 6: ANALYSIS ---
-    def setup_analysis_tab(self):
-        f = tk.Frame(self.tab_ana); f.pack(fill="both", expand=True, padx=10, pady=10)
-        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=(10, 5))
-        self.canvas = FigureCanvasTkAgg(self.fig, master=f)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        ttk.Button(self.tab_ana, text="Update Charts", command=self.plot_analysis).pack()
-
-    def plot_analysis(self):
-        self.ax1.clear(); self.ax2.clear()
-        inc = self.df[self.df['Type'] == "Incoming"]
-        if not inc.empty:
-            ig = inc.groupby("Category")['Amount'].sum()
-            self.ax1.pie(ig, labels=ig.index, autopct='%1.1f%%'); self.ax1.set_title("Income")
-        out = self.df[self.df['Type'] == "Outgoing"]
-        if not out.empty:
-            og = out.groupby("Category")['Amount'].sum()
-            self.ax2.pie(og, labels=og.index, autopct='%1.1f%%'); self.ax2.set_title("Donations")
-        self.canvas.draw()
-
-    # --- TAB 7: REPORTS ---
-    def setup_report_tab(self):
-        f = tk.Frame(self.tab_rep); f.pack(fill="x", padx=10, pady=10)
-        tk.Label(f, text="Member:").pack(side="left")
-        self.rep_mem = ttk.Combobox(f, width=20); self.rep_mem.pack(side="left", padx=5)
-        self.rep_mem.bind("<Button-1>", lambda e: self.update_rep_dropdown())
-        tk.Label(f, text="Year:").pack(side="left")
-        self.rep_yr = ttk.Combobox(f, values=YEARS, width=6); self.rep_yr.set(str(datetime.now().year)); self.rep_yr.pack(side="left")
-        ttk.Button(f, text="Generate PDF", command=self.generate_pdf).pack(side="left", padx=20)
-
-    def update_rep_dropdown(self):
-        self.rep_mem['values'] = sorted(list(self.members_db.keys()))
-
-    def generate_pdf(self):
-        if not HAS_PDF: return messagebox.showerror("Error", "ReportLab not installed")
-        name = self.rep_mem.get()
-        year = int(self.rep_yr.get())
-        
-        mdf = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming') & (self.df['Year'] == year)]
-        mem_info = self.members_db.get(name, {})
-        fname = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=f"{name}_{year}.pdf")
-        if not fname: return
-        
-        try:
-            doc = SimpleDocTemplate(fname, pagesize=A4)
-            elements = []
-            styles = getSampleStyleSheet()
-            
-            elements.append(Paragraph("Charity Report", styles['Title']))
-            elements.append(Paragraph(QURAN_QUOTE, styles['Normal'])); elements.append(Paragraph(HADITH_QUOTE, styles['Normal']))
-            elements.append(Spacer(1, 20))
-            elements.append(Paragraph(f"Member: {name} | Phone: {mem_info.get('phone','-')}", styles['Normal']))
-            elements.append(Spacer(1, 15))
-            
-            data1 = [["Date", "Category", "Amount"]]
-            total = 0
-            for _, r in mdf.iterrows():
-                data1.append([r['Date'], r['Category'], f"{r['Amount']:.2f}"])
-                total += r['Amount']
-            data1.append(["", "TOTAL:", f"{total:.2f}"])
-            
-            t1 = Table(data1, colWidths=[100, 150, 100]); t1.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black)]))
-            elements.append(t1)
-            
-            doc.build(elements)
-            messagebox.showinfo("Success", f"PDF Saved")
-        except Exception as e: messagebox.showerror("PDF Error", str(e))
 
 if __name__ == "__main__":
     root = tk.Tk()
