@@ -143,21 +143,25 @@ class CharityApp:
         nb.pack(fill="both", expand=True, padx=10, pady=5)
         
         # FIX: Explicitly naming attributes to match setup functions
-        self.tab_trans = ttk.Frame(nb); nb.add(self.tab_trans, text="1. Transaction Entry")
-        self.tab_log = ttk.Frame(nb); nb.add(self.tab_log, text="2. Activity Log")
-        self.tab_don = ttk.Frame(nb); nb.add(self.tab_don, text="3. Donation List")
-        self.tab_ana = ttk.Frame(nb); nb.add(self.tab_ana, text="4. Analysis")
-        self.tab_rep = ttk.Frame(nb); nb.add(self.tab_rep, text="5. Member Reports")
-        self.tab_mem = ttk.Frame(nb); nb.add(self.tab_mem, text="6. Member Management")
-        self.tab_matrix = ttk.Frame(nb); nb.add(self.tab_matrix, text="7. Member Overall Contribution")
+        self.tab_mem = ttk.Frame(nb); nb.add(self.tab_mem, text="1. Member Management")
+        self.tab_trans = ttk.Frame(nb); nb.add(self.tab_trans, text="2. Transaction Entry")
+        self.tab_log = ttk.Frame(nb); nb.add(self.tab_log, text="3. Activity Log")
+        self.tab_matrix = ttk.Frame(nb); nb.add(self.tab_matrix, text="4. Member Overall Contribution")
+        self.tab_don = ttk.Frame(nb); nb.add(self.tab_don, text="5. Donation List")
+        self.tab_ana = ttk.Frame(nb); nb.add(self.tab_ana, text="6. Analysis")
+        self.tab_rep = ttk.Frame(nb); nb.add(self.tab_rep, text="7. Member Reports")
         
+        
+        
+        self.setup_member_tab()
         self.setup_transaction_tab()
         self.setup_log_tab()
+        self.setup_overall_contribution_tab()
         self.setup_donation_tab()
         self.setup_analysis_tab()
         self.setup_report_tab()
-        self.setup_member_tab()
-        self.setup_overall_contribution_tab()
+        
+        
 
     # --- TAB 1: TRANSACTION ---
     def setup_transaction_tab(self):
