@@ -37,24 +37,28 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # Use --windowed (-w) for macOS to create a .app bundle
-        # Windows/Linux keep --onefile
+        # We use --collect-all for complex libraries to ensure they work on Mac/Linux
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
-          pyinstaller --windowed --noconsole --clean --name "Charity-Desktop" \
-          --hidden-import=pandas --hidden-import=matplotlib --hidden-import=reportlab \
-          --hidden-import=PIL --hidden-import=PIL._tkinter_finder --hidden-import=PIL.ImageTk \
+          pyinstaller --windowed --noconsole --clean \
+          --name "Charity-Desktop" \
+          --collect-all pandas \
+          --collect-all matplotlib \
+          --hidden-import=PIL._tkinter_finder \
           Charity.py
         else
-          pyinstaller --onefile --clean --name "Charity-Desktop" \
-          --hidden-import=pandas --hidden-import=matplotlib --hidden-import=reportlab \
-          --hidden-import=PIL --hidden-import=PIL._tkinter_finder --hidden-import=PIL.ImageTk \
+          pyinstaller --onefile --clean \
+          --name "Charity-Desktop" \
+          --collect-all pandas \
+          --collect-all matplotlib \
+          --hidden-import=PIL._tkinter_finder \
           Charity.py
         fi
 
-    # Mac .app is actually a folder. We must zip it to preserve permissions.
-    - name: Zip Mac App
+    - name: Fix Mac Permissions & Zip
       if: matrix.os == 'macos-latest'
       run: |
+        # This ensures the internal binary has 'execute' permissions
+        chmod +x dist/Charity-Desktop.app/Contents/MacOS/Charity-Desktop
         cd dist
         zip -r Charity-Desktop-Mac.zip Charity-Desktop.app
 
