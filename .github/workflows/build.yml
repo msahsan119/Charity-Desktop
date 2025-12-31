@@ -14,6 +14,8 @@ jobs:
         shell: bash
     strategy:
       matrix:
+        # Focusing on Windows and Mac (macos-13 is Intel, macos-14 is Apple Silicon)
+        # Using macos-latest (currently 14/ARM) helps if you have an M1/M2/M3 Mac
         os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
@@ -37,29 +39,34 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # We use --collect-all for complex libraries to ensure they work on Mac/Linux
-        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+        # Mac Specific Build (Creates a .app bundle)
+        if [ "${{ runner.os }}" == "macOS" ]; then
           pyinstaller --windowed --noconsole --clean \
           --name "Charity-Desktop" \
-          --collect-all pandas \
-          --collect-all matplotlib \
+          --hidden-import=pandas \
+          --hidden-import=matplotlib \
           --hidden-import=PIL._tkinter_finder \
+          --collect-all=reportlab \
           Charity.py
+
+        # Windows/Linux Build (Creates a single file executable)
         else
           pyinstaller --onefile --clean \
           --name "Charity-Desktop" \
-          --collect-all pandas \
-          --collect-all matplotlib \
+          --hidden-import=pandas \
+          --hidden-import=matplotlib \
           --hidden-import=PIL._tkinter_finder \
+          --collect-all=reportlab \
           Charity.py
         fi
 
-    - name: Fix Mac Permissions & Zip
-      if: matrix.os == 'macos-latest'
+    - name: Package Mac App
+      if: runner.os == 'macOS'
       run: |
-        # This ensures the internal binary has 'execute' permissions
-        chmod +x dist/Charity-Desktop.app/Contents/MacOS/Charity-Desktop
+        # Mac apps must be zipped to preserve their folder structure
         cd dist
+        # Make the inner binary executable just in case
+        chmod +x Charity-Desktop.app/Contents/MacOS/Charity-Desktop
         zip -r Charity-Desktop-Mac.zip Charity-Desktop.app
 
     - name: Upload Artifact
