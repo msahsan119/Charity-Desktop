@@ -285,13 +285,49 @@ class CharityApp:
         self.ent_inc_cat.grid(row=2, column=1, columnspan=2, padx=5, pady=5)
         
         # OUTGOING
-        tk.Label(self.f_outgoing, text="Beneficiary Name:").grid(row=0, column=0, sticky="w"); self.out_ben = ttk.Entry(self.f_outgoing, width=25); self.out_ben.grid(row=0, column=1, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Address:").grid(row=0, column=2, sticky="w"); self.out_addr = ttk.Entry(self.f_outgoing, width=25); self.out_addr.grid(row=0, column=3, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Responsible Person:").grid(row=1, column=0, sticky="w"); self.out_resp = ttk.Combobox(self.f_outgoing, width=22); self.out_resp.grid(row=1, column=1, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Reason/Note:").grid(row=1, column=2, sticky="w"); self.out_reason = ttk.Entry(self.f_outgoing, width=25); self.out_reason.grid(row=1, column=3, padx=5, pady=2)
+        
+                
+        # tk.Label(self.f_outgoing, text="Member Name:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        
+        # tk.Label(self.f_outgoing, text="Group:").grid(row=2, column=0, sticky="w"); self.out_grp = ttk.Combobox(self.f_outgoing, values=["Brother", "Sister"], width=22); self.out_grp.grid(row=2, column=1, padx=5, pady=2)
+        
+        # tk.Label(self.f_outgoing, text="Beneficiary Name:").grid(row=0, column=0, sticky="w"); self.out_ben = ttk.Entry(self.f_outgoing, width=25); self.out_ben.grid(row=0, column=1, padx=5, pady=2)
+        # tk.Label(self.f_outgoing, text="Address:").grid(row=0, column=2, sticky="w"); self.out_addr = ttk.Entry(self.f_outgoing, width=25); self.out_addr.grid(row=0, column=3, padx=5, pady=2)
+        
+        # tk.Label(self.f_outgoing, text="Responsible Person:").grid(row=1, column=0, sticky="w"); self.out_resp = ttk.Combobox(self.f_outgoing, width=22); self.out_resp.grid(row=1, column=1, padx=5, pady=2)
+        
+        # tk.Label(self.f_outgoing, text="Reason/Note:").grid(row=1, column=2, sticky="w"); self.out_reason = ttk.Entry(self.f_outgoing, width=25); self.out_reason.grid(row=1, column=3, padx=5, pady=2)
 
-        tk.Label(self.f_outgoing, text="Group:").grid(row=2, column=0, sticky="w"); self.out_grp = ttk.Combobox(self.f_outgoing, values=["Brother", "Sister"], width=22); self.out_grp.grid(row=2, column=1, padx=5, pady=2)
-        tk.Label(self.f_outgoing, text="Fund Source:").grid(row=2, column=2, sticky="w"); self.out_fund = ttk.Combobox(self.f_outgoing, values=self.income_cats, width=22); self.out_fund.grid(row=2, column=3, padx=5, pady=2)
+        # tk.Label(self.f_outgoing, text="Fund Source:").grid(row=2, column=2, sticky="w"); self.out_fund = ttk.Combobox(self.f_outgoing, values=self.income_cats, width=22); self.out_fund.grid(row=2, column=3, padx=5, pady=2)
+        
+        tk.Label(self.f_outgoing, text="Beneficiary Name:").grid(row=0, column=0, sticky="w")
+        self.out_ben = ttk.Entry(self.f_outgoing, width=25)
+        self.out_ben.grid(row=0, column=1, padx=5, pady=2)
+        
+        tk.Label(self.f_outgoing, text="Address:").grid(row=0, column=2, sticky="w")
+        self.out_addr = ttk.Entry(self.f_outgoing, width=25)
+        self.out_addr.grid(row=0, column=3, padx=5, pady=2)
+        
+        # Responsible Person (Dropdown values will be set dynamically)
+        tk.Label(self.f_outgoing, text="Responsible Person:").grid(row=1, column=0, sticky="w")
+        self.out_resp = ttk.Combobox(self.f_outgoing, width=22)
+        self.out_resp.grid(row=1, column=1, padx=5, pady=2)
+        
+        tk.Label(self.f_outgoing, text="Reason/Note:").grid(row=1, column=2, sticky="w")
+        self.out_reason = ttk.Entry(self.f_outgoing, width=25)
+        self.out_reason.grid(row=1, column=3, padx=5, pady=2)
+
+        # Group Selection with Event Binding
+        tk.Label(self.f_outgoing, text="Group:").grid(row=2, column=0, sticky="w")
+        self.out_grp = ttk.Combobox(self.f_outgoing, values=["Brother", "Sister"], width=22)
+        self.out_grp.grid(row=2, column=1, padx=5, pady=2)
+        self.out_grp.set("Brother") # Set Default
+        self.out_grp.bind("<<ComboboxSelected>>", self.update_responsible_dropdown) # <--- NEW BINDING
+
+        tk.Label(self.f_outgoing, text="Fund Source:").grid(row=2, column=2, sticky="w")
+        self.out_fund = ttk.Combobox(self.f_outgoing, values=self.income_cats, width=22)
+        self.out_fund.grid(row=2, column=3, padx=5, pady=2)
+        
         
         tk.Label(self.f_outgoing, text="Usage Type:").grid(row=3, column=0, sticky="w")
         self.ent_out_cat_manage = ttk.Combobox(self.f_outgoing, values=self.outgoing_cats, width=22)
@@ -302,6 +338,8 @@ class CharityApp:
         self.lbl_med = tk.Label(self.f_outgoing, text="Condition:"); self.ent_med = ttk.Combobox(self.f_outgoing, values=MEDICAL_SUB_TYPES, width=22)
 
         ttk.Button(main, text="💾 SAVE TRANSACTION", command=self.submit_transaction).pack(pady=20)
+        
+        
         
         # Last 5
         last5_frame = ttk.LabelFrame(main, text="Last 5 Entries (Double-click to Edit)")
@@ -320,10 +358,13 @@ class CharityApp:
 
     def update_form_view(self):
         if self.var_type.get() == "Incoming":
-            self.f_outgoing.pack_forget(); self.f_incoming.pack(fill="x", padx=10, pady=5)
+            self.f_outgoing.pack_forget()
+            self.f_incoming.pack(fill="x", padx=10, pady=5)
+            self.update_member_dropdown() # Filter Incoming Member List
         else:
-            self.f_incoming.pack_forget(); self.f_outgoing.pack(fill="x", padx=10, pady=5)
-            self.out_resp['values'] = sorted(list(self.members_db.keys()))
+            self.f_incoming.pack_forget()
+            self.f_outgoing.pack(fill="x", padx=10, pady=5)
+            self.update_responsible_dropdown() # Filter Responsible Person List
 
     def check_medical(self, event=None):
         if self.out_use.get() == "Medical help": self.lbl_med.grid(row=3, column=2, sticky="w", padx=5); self.ent_med.grid(row=3, column=3, padx=5)
@@ -333,7 +374,15 @@ class CharityApp:
         grp = self.var_inc_grp.get()
         mems = [n for n, d in self.members_db.items() if d.get('group') == grp]
         self.ent_inc_name['values'] = sorted(mems)
-
+    
+    def update_responsible_dropdown(self, event=None):
+        """Filters Responsible Person list based on Outgoing Group"""
+        grp = self.out_grp.get()
+        # Find members where 'group' matches the outgoing group selection
+        mems = [n for n, d in self.members_db.items() if d.get('group') == grp]
+        self.out_resp['values'] = sorted(mems)
+        self.out_resp.set('') # Clear previous selection to ensure validity
+    
     def submit_transaction(self):
         try:
             amt = float(self.ent_amt.get())
@@ -551,8 +600,8 @@ class CharityApp:
         
         msg_frame = tk.LabelFrame(self.tab_rep, text="PDF Messages")
         msg_frame.pack(fill="x", padx=10)
-        self.txt_header = tk.Text(msg_frame, height=15); self.txt_header.pack(fill="x"); self.txt_header.insert("1.0", "We appreciate your contribution.")
-        self.txt_footer = tk.Text(msg_frame, height=15); self.txt_footer.pack(fill="x"); self.txt_footer.insert("1.0", "Contact admin for queries.")
+        self.txt_header = tk.Text(msg_frame, height=20); self.txt_header.pack(fill="x"); self.txt_header.insert("1.0", "We appreciate your contribution.")
+        self.txt_footer = tk.Text(msg_frame, height=20); self.txt_footer.pack(fill="x"); self.txt_footer.insert("1.0", "Contact admin for queries.")
 
     def update_rep_dropdown(self):
         mems = sorted(list(self.members_db.keys()))
@@ -726,7 +775,155 @@ class CharityApp:
         except Exception as e: messagebox.showerror("PDF Error", str(e))
             
             
-    
+    def generate_report_pdf2(self):
+        if not HAS_PDF: return messagebox.showerror("Error", "ReportLab not installed")
+        name = self.rep_mem.get(); year = int(self.rep_yr.get())
+        if not name: return
+        
+        # 1. Filter Incoming Data for Member
+        mdf = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming') & (self.df['Year'] == year)]
+        
+        # 2. Filter Outgoing Data (Donations) for Member's Group
+        mem_info = self.members_db.get(name, {})
+        grp = mem_info.get('group', 'Brother')
+        don_df = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Year'] == year) & (self.df['Group'] == grp)].sort_values('Month')
+
+        fname = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=f"{name}_{year}.pdf")
+        if not fname: return
+        
+        try:
+            doc = SimpleDocTemplate(fname, pagesize=A4)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Styles
+            title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=20, textColor=colors.darkgreen)
+            header_style = ParagraphStyle('Header', parent=styles['Normal'], alignment=TA_CENTER, fontSize=12)
+            quote_style = ParagraphStyle('Quote', parent=styles['Italic'], textColor=colors.darkblue)
+            highlight_style = ParagraphStyle('Highlight', parent=styles['Normal'], fontSize=12, textColor=colors.darkblue)
+
+            # Header
+            elements.append(Paragraph("Bismillah hir Rahmanir Rahim", header_style))
+            elements.append(Paragraph("Sadaka Group Berlin", title_style))
+            elements.append(Paragraph("Member Contribution Report", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            elements.append(Paragraph(QURAN_QUOTE, quote_style)); elements.append(Paragraph(HADITH_QUOTE, quote_style)); elements.append(Spacer(1, 15))
+            
+            # --- TABLE 1: TRANSACTION LOG ---
+            elements.append(Paragraph(f"1. Transaction Log ({year})", styles['Heading3']))
+            data1 = [["Date", "Category", "Amount"]]
+            total_inc = 0
+            
+            # Sort by date
+            if not mdf.empty:
+                mdf_sorted = mdf.sort_values(by=['Month'])
+                for _, r in mdf_sorted.iterrows():
+                    data1.append([r['Date'], r['Category'], f"{r['Amount']:.2f}"])
+                    total_inc += r['Amount']
+            
+            data1.append(["", "TOTAL:", f"{total_inc:.2f}"])
+            t1 = Table(data1, colWidths=[120, 180, 100]); t1.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
+            elements.append(t1); elements.append(Spacer(1, 20))
+            
+            # --- TABLE 2: MONTHLY CATEGORIZED MATRIX (Requested Format) ---
+            elements.append(Paragraph(f"2. Monthly Income Summary ({year})", styles['Heading3']))
+            
+            # 1. Prepare Columns (Month + Categories + Total)
+            cats = self.income_cats
+            matrix_headers = ["Month"] + cats + ["Total"]
+            matrix_data = [matrix_headers]
+            
+            cat_totals = {c: 0.0 for c in cats}
+            grand_matrix_total = 0.0
+            
+            # 2. Iterate Months (Rows)
+            for m_num in range(1, 13):
+                m_name = MONTH_NAMES[m_num-1]
+                row = [m_name]
+                m_total = 0.0
+                
+                for c in cats:
+                    # Sum amount for specific month and category
+                    val = mdf[(mdf['Month'] == m_num) & (mdf['Category'] == c)]['Amount'].sum()
+                    if val > 0:
+                        row.append(f"{val:.0f}")
+                    else:
+                        row.append("-")
+                    
+                    cat_totals[c] += val
+                    m_total += val
+                
+                row.append(f"{m_total:,.2f}")
+                matrix_data.append(row)
+                grand_matrix_total += m_total
+
+            # 3. Footer Row (Totals)
+            footer_row = ["TOTAL"]
+            for c in cats:
+                footer_row.append(f"{cat_totals[c]:,.0f}")
+            footer_row.append(f"{grand_matrix_total:,.2f}")
+            matrix_data.append(footer_row)
+            
+            # 4. Create Matrix Table
+            # Dynamic width calculation to fit A4 page (approx 450 points usable width)
+            col_w = 450 / len(matrix_headers)
+            t_matrix = Table(matrix_data, colWidths=[col_w] * len(matrix_headers))
+            
+            t_matrix.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.darkblue), # Header bg
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), # Header text
+                ('FONTSIZE', (0,0), (-1,-1), 8), # Smaller font to fit many columns
+                ('ALIGN', (1,0), (-1,-1), 'CENTER'),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.lightgrey), # Footer bg
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ]))
+            elements.append(t_matrix); elements.append(Spacer(1, 20))
+
+            # Table 3: Donations Distributed
+            grp = mem_info.get('group', 'Brother')
+            don_df = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Year'] == year) & (self.df['Group'] == grp)].copy()
+            if not don_df.empty:
+                don_df['Date_Obj'] = pd.to_datetime(don_df['Date'], errors='coerce')
+                don_df = don_df.sort_values(by='Date_Obj')
+            
+            elements.append(Paragraph(f"2. Donations Distributed ({grp}s)", styles['Heading3']))
+            data2 = [["Date", "Beneficiary", "Reason", "Responsible", "Amount"]]
+            d_total = 0
+            for _, r in don_df.iterrows():
+                data2.append([r['Date'], r['Name_Details'], r['Reason'], r['Responsible'], f"{r['Amount']:.2f}"])
+                d_total += r['Amount']
+            data2.append(["", "", "", "TOTAL:", f"{d_total:.2f}"])
+            t2 = Table(data2, colWidths=[50, 90, 90, 120, 50]); t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke)]))
+            elements.append(t2)
+            elements.append(Spacer(1, 20))
+            
+            # Charts
+            elements.append(Paragraph(f"3. Analysis Charts ({year})", styles['Heading3']))
+            
+            fund_stats = don_df.groupby("Category")['Amount'].sum()
+            img_fund = self.create_pie_chart_image(fund_stats, "By Fund Source")
+            usage_stats = don_df.groupby("SubCategory")['Amount'].sum()
+            img_usage = self.create_pie_chart_image(usage_stats, "By Usage")
+            
+            med_stats = don_df[don_df['SubCategory'] == "Medical help"].groupby("Medical")['Amount'].sum()
+            img_med = self.create_pie_chart_image(med_stats, "Medical Breakdown")
+
+            if img_fund and img_usage:
+                chart_table_1 = Table([[img_fund, img_usage]], colWidths=[3.5*inch, 3.5*inch])
+                elements.append(chart_table_1)
+            
+            if img_med:
+                chart_table_2 = Table([[img_med]], colWidths=[7*inch]); chart_table_2.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
+                elements.append(chart_table_2)
+            
+            # Footer
+            elements.append(Spacer(1, 30)); elements.append(Paragraph(self.txt_footer.get("1.0", "end-1c"), styles['Normal'])); elements.append(Spacer(1, 20))
+            elements.append(Paragraph("_______________________", styles['Normal'])); elements.append(Paragraph("Authorized Signature", styles['Normal']))
+            
+            doc.build(elements)
+            messagebox.showinfo("Success", f"PDF Saved")
+        except Exception as e: messagebox.showerror("PDF Error", str(e))
 
     # --- TAB 1: MEMBER MANAGEMENT (WITH RENAME FIX) ---
     def setup_member_tab(self):
