@@ -551,8 +551,8 @@ class CharityApp:
         
         msg_frame = tk.LabelFrame(self.tab_rep, text="PDF Messages")
         msg_frame.pack(fill="x", padx=10)
-        self.txt_header = tk.Text(msg_frame, height=2); self.txt_header.pack(fill="x"); self.txt_header.insert("1.0", "We appreciate your contribution.")
-        self.txt_footer = tk.Text(msg_frame, height=2); self.txt_footer.pack(fill="x"); self.txt_footer.insert("1.0", "Contact admin for queries.")
+        self.txt_header = tk.Text(msg_frame, height=15); self.txt_header.pack(fill="x"); self.txt_header.insert("1.0", "We appreciate your contribution.")
+        self.txt_footer = tk.Text(msg_frame, height=15); self.txt_footer.pack(fill="x"); self.txt_footer.insert("1.0", "Contact admin for queries.")
 
     def update_rep_dropdown(self):
         mems = sorted(list(self.members_db.keys()))
@@ -575,14 +575,12 @@ class CharityApp:
         name = self.rep_mem.get(); year = int(self.rep_yr.get())
         if not name: return
         
+        # 1. Filter Individual Data (USE .copy() TO FIX WARNING)
         mdf = self.df[(self.df['Name_Details'] == name) & (self.df['Type'] == 'Incoming') & (self.df['Year'] == year)].copy()
         
-        # Sorting for PDF
-        if not mdf.empty:
-            mdf['Date_Obj'] = pd.to_datetime(mdf['Date'], errors='coerce')
-            mdf = mdf.sort_values(by='Date_Obj')
-
         mem_info = self.members_db.get(name, {})
+        grp = mem_info.get('group', 'Brother') # Get Member's Group
+        
         fname = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=f"{name}_{year}.pdf")
         if not fname: return
         
@@ -617,44 +615,97 @@ class CharityApp:
             
             elements.append(Paragraph(self.txt_header.get("1.0", "end-1c"), styles['Italic'])); elements.append(Spacer(1, 15))
             
-            # Table 1: Contributions
-            elements.append(Paragraph(f"1. Contributions in {year}", styles['Heading3']))
-            data1 = [["Date", "Category", "Amount"]]; total = 0
-            for _, r in mdf.iterrows():
-                data1.append([r['Date'], r['Category'], f"{r['Amount']:.2f}"]); total += r['Amount']
-            data1.append(["", "TOTAL:", f"{total:.2f}"])
-            t1 = Table(data1, colWidths=[100, 150, 100]); t1.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkgreen), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke)]))
+            
+            # Table 1: Individual Log
+            elements.append(Paragraph(f"1. Your Transaction Log ({year})", styles['Heading3']))
+            data1 = [["Date", "Category", "Amount"]]; total_inc = 0
+            
+            if not mdf.empty:
+                mdf['Date_Obj'] = pd.to_datetime(mdf['Date'], errors='coerce')
+                mdf_sorted = mdf.sort_values(by='Date_Obj')
+                for _, r in mdf_sorted.iterrows():
+                    data1.append([r['Date'], r['Category'], f"{r['Amount']:.2f}"])
+                    total_inc += r['Amount']
+            
+            data1.append(["", "YOUR TOTAL:", f"{total_inc:.2f}"])
+            t1 = Table(data1, colWidths=[120, 180, 100])
+            t1.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
             elements.append(t1); elements.append(Spacer(1, 20))
             
-            # Table 2: Donations Distributed
-            grp = mem_info.get('group', 'Brother')
+            # Table 2: Group Summary
+            elements.append(Paragraph(f"2. Overall Group Collection ({grp}s) - {year}", styles['Heading3']))
+            group_df = self.df[(self.df['Type'] == 'Incoming') & (self.df['Year'] == year) & (self.df['Group'] == grp)]
+            cats = self.income_cats
+            matrix_headers = ["Month"] + cats + ["Total"]
+            matrix_data = [matrix_headers]
+            cat_totals = {c: 0.0 for c in cats}
+            grand_matrix_total = 0.0
+            
+            for m_num in range(1, 13):
+                m_name = MONTH_NAMES[m_num-1]
+                row = [m_name]
+                m_total = 0.0
+                for c in cats:
+                    val = group_df[(group_df['Month'] == m_num) & (group_df['Category'] == c)]['Amount'].sum()
+                    row.append(f"{val:,.0f}" if val > 0 else "-")
+                    cat_totals[c] += val
+                    m_total += val
+                row.append(f"{m_total:,.2f}")
+                matrix_data.append(row)
+                grand_matrix_total += m_total
+
+            footer_row = ["TOTAL"]
+            for c in cats: footer_row.append(f"{cat_totals[c]:,.0f}")
+            footer_row.append(f"{grand_matrix_total:,.2f}")
+            matrix_data.append(footer_row)
+            
+            col_w = 450 / len(matrix_headers)
+            t_matrix = Table(matrix_data, colWidths=[col_w] * len(matrix_headers))
+            t_matrix.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.darkblue),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('FONTSIZE', (0,0), (-1,-1), 7),
+                ('ALIGN', (1,0), (-1,-1), 'CENTER'),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.lightgrey),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ]))
+            elements.append(t_matrix); elements.append(Spacer(1, 20))
+
+            # Table 3: Donations Distributed (USE .copy() TO FIX WARNING)
             don_df = self.df[(self.df['Type'] == 'Outgoing') & (self.df['Year'] == year) & (self.df['Group'] == grp)].copy()
+            
             if not don_df.empty:
                 don_df['Date_Obj'] = pd.to_datetime(don_df['Date'], errors='coerce')
                 don_df = don_df.sort_values(by='Date_Obj')
-            
-            elements.append(Paragraph(f"2. Donations Distributed ({grp}s)", styles['Heading3']))
-            data2 = [["Date", "Beneficiary", "Reason", "Responsible", "Amount"]]
-            d_total = 0
-            for _, r in don_df.iterrows():
-                data2.append([r['Date'], r['Name_Details'], r['Reason'], r['Responsible'], f"{r['Amount']:.2f}"])
-                d_total += r['Amount']
-            data2.append(["", "", "", "TOTAL:", f"{d_total:.2f}"])
-            t2 = Table(data2, colWidths=[50, 90, 90, 120, 50]); t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke)]))
-            elements.append(t2)
-            elements.append(Spacer(1, 20))
+                
+                elements.append(Paragraph(f"3. Donations Distributed to {grp}s", styles['Heading3']))
+                data2 = [["Date", "Beneficiary", "Reason", "Responsible", "Amount"]]
+                d_total = 0
+                for _, r in don_df.iterrows():
+                    data2.append([r['Date'], r['Name_Details'], r['Reason'], r['Responsible'], f"{r['Amount']:.2f}"])
+                    d_total += r['Amount']
+                
+                data2.append(["", "", "", "TOTAL:", f"{d_total:.2f}"])
+                t2 = Table(data2, colWidths=[70, 110, 110, 120, 65])
+                t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), ('FONTSIZE', (0,0), (-1,-1), 9)]))
+                elements.append(t2)
             
             # Charts
-            elements.append(Paragraph(f"3. Analysis Charts ({year})", styles['Heading3']))
-            
+            elements.append(Paragraph(f"4. Analysis Charts ({year})", styles['Heading3']))
             fund_stats = don_df.groupby("Category")['Amount'].sum()
             img_fund = self.create_pie_chart_image(fund_stats, "By Fund Source")
             usage_stats = don_df.groupby("SubCategory")['Amount'].sum()
             img_usage = self.create_pie_chart_image(usage_stats, "By Usage")
             
-            med_stats = don_df[don_df['SubCategory'] == "Medical help"].groupby("Medical")['Amount'].sum()
-            img_med = self.create_pie_chart_image(med_stats, "Medical Breakdown")
+            # Medical Breakdown (Safe Check)
+            med_df = don_df[don_df['SubCategory'] == "Medical help"]
+            img_med = None
+            if not med_df.empty:
+                med_stats = med_df.groupby("Medical")['Amount'].sum()
+                img_med = self.create_pie_chart_image(med_stats, "Medical Breakdown")
 
+            # Chart Layout
             if img_fund and img_usage:
                 chart_table_1 = Table([[img_fund, img_usage]], colWidths=[3.5*inch, 3.5*inch])
                 elements.append(chart_table_1)
@@ -664,12 +715,18 @@ class CharityApp:
                 elements.append(chart_table_2)
             
             # Footer
-            elements.append(Spacer(1, 30)); elements.append(Paragraph(self.txt_footer.get("1.0", "end-1c"), styles['Normal'])); elements.append(Spacer(1, 20))
-            elements.append(Paragraph("_______________________", styles['Normal'])); elements.append(Paragraph("Authorized Signature", styles['Normal']))
+            elements.append(Spacer(1, 30))
+            elements.append(Paragraph(self.txt_footer.get("1.0", "end-1c"), styles['Normal']))
+            elements.append(Spacer(1, 20))
+            elements.append(Paragraph("_______________________", styles['Normal']))
+            elements.append(Paragraph("Authorized Signature", styles['Normal']))
             
             doc.build(elements)
             messagebox.showinfo("Success", f"PDF Saved")
         except Exception as e: messagebox.showerror("PDF Error", str(e))
+            
+            
+    
 
     # --- TAB 1: MEMBER MANAGEMENT (WITH RENAME FIX) ---
     def setup_member_tab(self):
