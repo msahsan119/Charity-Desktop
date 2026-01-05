@@ -147,6 +147,20 @@ class CharityApp:
         
         mems = sorted(list(self.members_db.keys()))
         if hasattr(self, 'rep_mem'): self.rep_mem['values'] = mems
+        if hasattr(self, 'matrix_cat'): 
+            self.matrix_cat['values'] = ["All"] + self.income_cats
+        if hasattr(self, 'tree_ana_cats'):
+            self.update_analysis_tables()
+        if hasattr(self, 'tree_ana_cats'):
+            # Re-configure Category columns in case they changed
+            new_cols = ["Month"] + self.income_cats + ["Total"]
+            self.tree_ana_cats["columns"] = new_cols
+            for c in new_cols:
+                self.tree_ana_cats.heading(c, text=c)
+                self.tree_ana_cats.column(c, width=60, anchor="center")
+            self.tree_ana_cats.column("Month", width=80, anchor="w")
+        
+        self.refresh_analysis_views()
 
     # =========================================================================
     # UI COMPONENTS
@@ -554,25 +568,210 @@ class CharityApp:
 
     # --- TAB 6: ANALYSIS ---
     def setup_analysis_tab(self):
+        # --- Filters ---
         ctrl = tk.Frame(self.tab_ana); ctrl.pack(fill="x", padx=10, pady=5)
-        tk.Label(ctrl, text="Filter Year:").pack(side="left")
-        self.ana_yr = ttk.Combobox(ctrl, values=["All"] + YEARS, width=6); self.ana_yr.set("All"); self.ana_yr.pack(side="left")
-        tk.Label(ctrl, text="Chart:").pack(side="left", padx=10)
-        self.ana_chart = ttk.Combobox(ctrl, values=["Income Breakdown", "Donation Usage", "Medical Breakdown"], width=20); self.ana_chart.current(0); self.ana_chart.pack(side="left")
-        ttk.Button(ctrl, text="Update Chart", command=self.plot_analysis).pack(side="left", padx=10)
+        tk.Label(ctrl, text="Year:").pack(side="left")
+        self.ana_yr = ttk.Combobox(ctrl, values=["All"] + YEARS, width=6); self.ana_yr.set(str(datetime.now().year)); self.ana_yr.pack(side="left", padx=5)
+        tk.Label(ctrl, text="Group:").pack(side="left", padx=5)
+        self.ana_grp = ttk.Combobox(ctrl, values=["All", "Brother", "Sister"], width=10); self.ana_grp.set("All"); self.ana_grp.pack(side="left", padx=5)
+        tk.Label(ctrl, text="Chart:").pack(side="left", padx=5)
+        self.ana_chart = ttk.Combobox(ctrl, values=["Income Breakdown", "Donation Usage", "Medical Breakdown"], width=18); self.ana_chart.current(0); self.ana_chart.pack(side="left", padx=5)
+        ttk.Button(ctrl, text="🔄 Refresh Analysis", command=self.refresh_analysis_views).pack(side="left", padx=10)
 
-        f = tk.Frame(self.tab_ana); f.pack(fill="both", expand=True, padx=10, pady=10)
-        self.fig = Figure(figsize=(8, 6), dpi=100)
-        self.ax = self.fig.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=f)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        # --- Top Section: Chart ---
+        chart_f = tk.Frame(self.tab_ana, height=250); chart_f.pack(fill="x", padx=10)
+        self.fig = Figure(figsize=(5, 2.5), dpi=80); self.ax = self.fig.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=chart_f); self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        
+        # --- Bottom Section: Paned Tables ---
+        table_pane = tk.PanedWindow(self.tab_ana, orient=tk.HORIZONTAL)
+        table_pane.pack(fill="both", expand=True, padx=10, pady=5)
+       
+        f_left = tk.Frame(table_pane); table_pane.add(f_left, stretch="always")
+        f_right = tk.Frame(table_pane); table_pane.add(f_right, stretch="always")
 
+        # Table Left: Income Category Breakdown
+        tk.Label(f_left, text="Income Category Breakdown (Monthly)", font=("Arial", 10, "bold")).pack(anchor="w")
+        cat_cols = ["Month"] + self.income_cats + ["Total"]
+        self.tree_ana_cats = ttk.Treeview(f_left, columns=cat_cols, show="headings", height=14)
+        for c in cat_cols:
+           self.tree_ana_cats.heading(c, text=c[:4] if c in MONTH_NAMES else c)
+           self.tree_ana_cats.column(c, width=65, anchor="center")
+        self.tree_ana_cats.column("Month", width=80, anchor="w")
+        self.tree_ana_cats.pack(fill="both", expand=True)
+
+        # Table Right: Flow Overview
+        tk.Label(f_right, text="Incoming vs Outgoing Overview", font=("Arial", 10, "bold")).pack(anchor="w")
+        flow_cols = ["Month", "Income", "Outgoing", "Balance"]
+        self.tree_ana_flow = ttk.Treeview(f_right, columns=flow_cols, show="headings", height=14)
+        for c in flow_cols:
+           self.tree_ana_flow.heading(c, text=c)
+           self.tree_ana_flow.column(c, width=95, anchor="center")
+        self.tree_ana_flow.pack(fill="both", expand=True)
+    
+    def setup_analysis_tabx(self):
+        # --- Filters ---
+        ctrl = tk.Frame(self.tab_ana); ctrl.pack(fill="x", padx=10, pady=5)
+        tk.Label(ctrl, text="Year:").pack(side="left")
+        self.ana_yr = ttk.Combobox(ctrl, values=["All"] + YEARS, width=6); self.ana_yr.set(str(datetime.now().year)); self.ana_yr.pack(side="left", padx=5)
+        
+        tk.Label(ctrl, text="Group:").pack(side="left", padx=5)
+        self.ana_grp = ttk.Combobox(ctrl, values=["All", "Brother", "Sister"], width=10); self.ana_grp.set("All"); self.ana_grp.pack(side="left", padx=5)
+        
+        # ADD THIS: Re-insert the chart selector to fix the AttributeError
+        tk.Label(ctrl, text="Chart:").pack(side="left", padx=5)
+        self.ana_chart = ttk.Combobox(ctrl, values=["Income Breakdown", "Donation Usage", "Medical Breakdown"], width=18)
+        self.ana_chart.current(0); self.ana_chart.pack(side="left", padx=5)
+        
+        ttk.Button(ctrl, text="🔄 Refresh Analysis", command=self.refresh_analysis_views).pack(side="left", padx=10)
+
+
+        # --- Top Section: Charts ---
+        chart_f = tk.Frame(self.tab_ana, height=300); chart_f.pack(fill="x", padx=10)
+        self.fig = Figure(figsize=(5, 3), dpi=80); self.ax = self.fig.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=chart_f); self.canvas.get_tk_widget().pack(side="left", fill="both", expand=True)
+        
+        # --- Bottom Section: Tables ---
+        table_frame = tk.Frame(self.tab_ana); table_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Helper to create summary tables
+        def create_summary_table(parent, title, columns):
+            lbl = tk.Label(parent, text=title, font=("Arial", 10, "bold"), fg="darkblue"); lbl.pack(anchor="w")
+            tree = ttk.Treeview(parent, columns=columns, show="headings", height=7)
+            for c in columns: 
+                tree.heading(c, text=c if c in ["Metric", "Category"] else c[:3])
+                tree.column(c, width=65, anchor="center")
+            tree.column(columns[0], width=120, anchor="w") # First col wider
+            tree.pack(fill="x", pady=(0, 10))
+            return tree
+
+        cols = ["Category"] + MONTH_NAMES + ["Total", "Average"]
+        self.tree_ana_cats = create_summary_table(table_frame, "Income Category Breakdown", cols)
+        
+        cols_flow = ["Metric"] + MONTH_NAMES + ["Total", "Average"]
+        self.tree_ana_flow = create_summary_table(table_frame, "Incoming vs Outgoing Overview", cols_flow)
+
+    def refresh_analysis_views(self):
+        if hasattr(self, 'ana_chart'):
+           self.plot_analysis()
+           self.update_analysis_tables()
+    
+    def update_analysis_tables(self):
+        for tree in [self.tree_ana_cats, self.tree_ana_flow]:
+            for i in tree.get_children(): tree.delete(i)
+        
+        yr, grp = self.ana_yr.get(), self.ana_grp.get()
+        df_a = self.df.copy()
+        df_a['Amount'] = pd.to_numeric(df_a['Amount'], errors='coerce').fillna(0)
+        
+        if yr != "All": df_a = df_a[df_a['Year'] == int(yr)]
+        if grp != "All": df_a = df_a[df_a['Group'] == grp]
+
+        # Accumulators for Averages
+        col_totals_cats = {cat: 0.0 for cat in self.income_cats}
+        grand_total_inc = 0.0
+        total_flow_inc = 0.0
+        total_flow_out = 0.0
+
+        for m_idx, m_name in enumerate(MONTH_NAMES, 1):
+            # --- Table 1: Category Row ---
+            cat_row = [m_name]
+            month_sum = 0
+            for cat in self.income_cats:
+                val = df_a.loc[(df_a['Type'] == "Incoming") & (df_a['Month'] == m_idx) & (df_a['Category'] == cat), 'Amount'].sum()
+                cat_row.append(f"{val:.0f}" if val > 0 else "-")
+                col_totals_cats[cat] += val
+                month_sum += val
+            cat_row.append(f"{month_sum:,.2f}")
+            grand_total_inc += month_sum
+            self.tree_ana_cats.insert("", "end", values=cat_row)
+
+            # --- Table 2: Flow Row ---
+            inc_v = df_a.loc[(df_a['Type'] == "Incoming") & (df_a['Month'] == m_idx), 'Amount'].sum()
+            out_v = df_a.loc[(df_a['Type'] == "Outgoing") & (df_a['Month'] == m_idx), 'Amount'].sum()
+            self.tree_ana_flow.insert("", "end", values=[m_name, f"{inc_v:,.2f}", f"{out_v:,.2f}", f"{(inc_v - out_v):,.2f}"])
+            total_flow_inc += inc_v
+            total_flow_out += out_v
+
+        # --- FOOTER: TOTALS ---
+        f_cat_tot = ["TOTAL"] + [f"{col_totals_cats[c]:,.0f}" for c in self.income_cats] + [f"{grand_total_inc:,.2f}"]
+        self.tree_ana_cats.insert("", "end", values=f_cat_tot, tags=('bold',))
+        
+        f_flow_tot = ["TOTAL", f"{total_flow_inc:,.2f}", f"{total_flow_out:,.2f}", f"{(total_flow_inc - total_flow_out):,.2f}"]
+        self.tree_ana_flow.insert("", "end", values=f_flow_tot, tags=('bold',))
+
+        # --- FOOTER: AVERAGES ---
+        f_cat_avg = ["AVERAGE"] + [f"{(col_totals_cats[c]/12):,.0f}" for c in self.income_cats] + [f"{(grand_total_inc/12):,.2f}"]
+        self.tree_ana_cats.insert("", "end", values=f_cat_avg, tags=('avg',))
+        
+        f_flow_avg = ["AVERAGE", f"{(total_flow_inc/12):,.2f}", f"{(total_flow_out/12):,.2f}", f"{((total_flow_inc - total_flow_out)/12):,.2f}"]
+        self.tree_ana_flow.insert("", "end", values=f_flow_avg, tags=('avg',))
+        
+        # Styling
+        self.tree_ana_cats.tag_configure('bold', background='#e1e1e1', font=('Arial', 9, 'bold'))
+        self.tree_ana_flow.tag_configure('bold', background='#e1e1e1', font=('Arial', 9, 'bold'))
+        self.tree_ana_cats.tag_configure('avg', background='#f0f8ff', font=('Arial', 9, 'italic'))
+        self.tree_ana_flow.tag_configure('avg', background='#f0f8ff', font=('Arial', 9, 'italic'))
+    
+    def update_analysis_tables2(self):
+        # Clear existing
+        for tree in [self.tree_ana_cats, self.tree_ana_flow]:
+            for i in tree.get_children(): tree.delete(i)
+        
+        yr, grp = self.ana_yr.get(), self.ana_grp.get()
+        df_a = self.df.copy()
+        df_a['Amount'] = pd.to_numeric(df_a['Amount'], errors='coerce').fillna(0)
+        
+        if yr != "All": df_a = df_a[df_a['Year'] == int(yr)]
+        if grp != "All": df_a = df_a[df_a['Group'] == grp]
+
+        # Monthly Row Logic
+        grand_total_inc = 0
+        grand_total_out = 0
+
+        for m_idx, m_name in enumerate(MONTH_NAMES, 1):
+            # --- Table 1: Category Row ---
+            cat_row = [m_name]
+            month_sum = 0
+            for cat in self.income_cats:
+                val = df_a.loc[(df_a['Type'] == "Incoming") & (df_a['Month'] == m_idx) & (df_a['Category'] == cat), 'Amount'].sum()
+                cat_row.append(f"{val:.0f}" if val > 0 else "-")
+                month_sum += val
+            cat_row.append(f"{month_sum:,.2f}")
+            self.tree_ana_cats.insert("", "end", values=cat_row)
+
+            # --- Table 2: Flow Row ---
+            inc_val = df_a.loc[(df_a['Type'] == "Incoming") & (df_a['Month'] == m_idx), 'Amount'].sum()
+            out_val = df_a.loc[(df_a['Type'] == "Outgoing") & (df_a['Month'] == m_idx), 'Amount'].sum()
+            flow_row = [m_name, f"{inc_val:,.2f}", f"{out_val:,.2f}", f"{(inc_val - out_val):,.2f}"]
+            self.tree_ana_flow.insert("", "end", values=flow_row)
+            
+            grand_total_inc += inc_val
+            grand_total_out += out_val
+
+        # Add Summary Totals at bottom
+        footer_cats = ["TOTAL"] + [""] * len(self.income_cats) + [f"{grand_total_inc:,.2f}"]
+        self.tree_ana_cats.insert("", "end", values=footer_cats, tags=('bold',))
+        
+        footer_flow = ["TOTAL", f"{grand_total_inc:,.2f}", f"{grand_total_out:,.2f}", f"{(grand_total_inc - grand_total_out):,.2f}"]
+        self.tree_ana_flow.insert("", "end", values=footer_flow, tags=('bold',))
+        
+        self.tree_ana_cats.tag_configure('bold', font=('Arial', 9, 'bold'), background='#eeeeee')
+        self.tree_ana_flow.tag_configure('bold', font=('Arial', 9, 'bold'), background='#eeeeee')
+            
+    
+    
     def plot_analysis(self):
         self.ax.clear()
         chart = self.ana_chart.get()
         yr = self.ana_yr.get()
+        grp = self.ana_grp.get() # Added Group filter
+        
         df_a = self.df.copy()
+        df_a['Amount'] = pd.to_numeric(df_a['Amount'], errors='coerce').fillna(0)
+        
         if yr != "All": df_a = df_a[df_a['Year'] == int(yr)]
+        if grp != "All": df_a = df_a[df_a['Group'] == grp] # Apply Group filter
         
         data = None; title = ""
         if chart == "Income Breakdown":
@@ -585,7 +784,8 @@ class CharityApp:
         
         if data is not None and not data.empty:
             self.ax.pie(data, labels=data.index, autopct='%1.1f%%'); self.ax.set_title(title)
-        else: self.ax.text(0.5, 0.5, "No Data", ha='center')
+        else: 
+            self.ax.text(0.5, 0.5, "No Data for Selection", ha='center')
         self.canvas.draw()
 
     # --- TAB 7: REPORTS ---
@@ -886,7 +1086,11 @@ class CharityApp:
         self.matrix_yr = ttk.Combobox(ctrl, values=["All"] + YEARS, width=6); self.matrix_yr.set("All"); self.matrix_yr.pack(side="left", padx=5)
         tk.Label(ctrl, text="Group:").pack(side="left", padx=10)
         self.matrix_grp = ttk.Combobox(ctrl, values=["All", "Brother", "Sister"], width=8); self.matrix_grp.set("All"); self.matrix_grp.pack(side="left", padx=5)
+        
+        tk.Label(ctrl, text="Category:").pack(side="left", padx=5)
+        self.matrix_cat = ttk.Combobox(ctrl, values=["All"] + self.income_cats, width=12); self.matrix_cat.set("All"); self.matrix_cat.pack(side="left", padx=5) 
         ttk.Button(ctrl, text="Load / Refresh", command=self.generate_matrix_report).pack(side="left", padx=20)
+        
         cols = ["Name"] + MONTH_NAMES + ["TOTAL"]
         self.tree_matrix = ttk.Treeview(self.tab_matrix, columns=cols, show="headings", height=20)
         self.tree_matrix.heading("Name", text="Member Name"); self.tree_matrix.column("Name", width=150, anchor="w")
@@ -898,11 +1102,16 @@ class CharityApp:
 
     def generate_matrix_report(self):
         for i in self.tree_matrix.get_children(): self.tree_matrix.delete(i)
-        yr, grp = self.matrix_yr.get(), self.matrix_grp.get()
+        yr, grp, cat = self.matrix_yr.get(), self.matrix_grp.get(), self.matrix_cat.get()
+        
         data = self.df[self.df['Type'] == 'Incoming'].copy()
         data['Amount'] = pd.to_numeric(data['Amount'], errors='coerce').fillna(0)
+        
         if yr != "All": data = data[data['Year'] == int(yr)]
         if grp != "All": data = data[data['Group'] == grp]
+        # --- APPLY CATEGORY FILTER ---
+        if cat != "All": data = data[data['Category'] == cat]
+        
         if data.empty: return
         pivot = data.pivot_table(index="Name_Details", columns="Month", values="Amount", aggfunc="sum", fill_value=0)
         monthly_totals = {m: 0.0 for m in range(1, 13)}; grand_total = 0.0
