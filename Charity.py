@@ -900,7 +900,7 @@ class CharityApp:
                 d_total += r['Amount']
             data2.append(["", "", "", "TOTAL:", f"{d_total:.2f}"])
             
-            t2 = Table(data2, colWidths=[60, 100, 100, 80, 60]); t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), ('FONTSIZE', (0,0), (-1,-1), 8)]))
+            t2 = Table(data2, colWidths=[60, 100, 95, 120, 45]); t2.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.darkred), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), ('FONTSIZE', (0,0), (-1,-1), 8)]))
             elements.append(t2)
             elements.append(Spacer(1, 20))
             
@@ -970,6 +970,49 @@ class CharityApp:
             if img_med:
                 chart_table_2 = Table([[img_med]], colWidths=[7*inch]); chart_table_2.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
                 elements.append(chart_table_2)
+            
+            # --- NEW TABLE: OVERALL OVERVIEW (All Members) ---
+            elements.append(Paragraph(f"4. Overview: Total Income vs Donation - All Members ({year})", styles['Heading3']))
+            
+            # Filter data for the entire year across both groups
+            overall_df = self.df[self.df['Year'] == year].copy()
+            
+            ov_data = [["Month", "Total Income", "Total Donation", "Balance"]]
+            ov_inc_total, ov_don_total = 0.0, 0.0
+
+            for m_idx in range(1, 13):
+                m_inc = overall_df[(overall_df['Type'] == 'Incoming') & (overall_df['Month'] == m_idx)]['Amount'].sum()
+                m_don = overall_df[(overall_df['Type'] == 'Outgoing') & (overall_df['Month'] == m_idx)]['Amount'].sum()
+                m_bal = m_inc - m_don
+                
+                ov_data.append([
+                    MONTH_NAMES[m_idx-1], 
+                    f"{m_inc:.2f}", 
+                    f"{m_don:.2f}", 
+                    f"{m_bal:.2f}"
+                ])
+                
+                ov_inc_total += m_inc
+                ov_don_total += m_don
+
+            # Total and Average Rows
+            ov_bal_total = ov_inc_total - ov_don_total
+            ov_data.append(["TOTAL", f"{ov_inc_total:.2f}", f"{ov_don_total:.2f}", f"{ov_bal_total:.2f}"])
+            ov_data.append(["AVERAGE", f"{(ov_inc_total/12):.2f}", f"{(ov_don_total/12):.2f}", f"{(ov_bal_total/12):.2f}"])
+
+            # Create and Style Table
+            t_ov = Table(ov_data, colWidths=[100, 100, 100, 100])
+            t_ov.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 1, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.darkcyan), # Header color
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('BACKGROUND', (0,-2), (-1,-2), colors.lightgrey), # Total row background
+                ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),  # Bold footer rows
+                ('ALIGN', (1,0), (-1,-1), 'CENTER')
+            ]))
+            
+            elements.append(t_ov)
+            elements.append(Spacer(1, 20))
             
             # Footer
             elements.append(Spacer(1, 30))
