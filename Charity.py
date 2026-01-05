@@ -579,8 +579,8 @@ class CharityApp:
         ttk.Button(ctrl, text="🔄 Refresh Analysis", command=self.refresh_analysis_views).pack(side="left", padx=10)
 
         # --- Top Section: Chart ---
-        chart_f = tk.Frame(self.tab_ana, height=250); chart_f.pack(fill="x", padx=10)
-        self.fig = Figure(figsize=(5, 2.5), dpi=80); self.ax = self.fig.add_subplot(111)
+        chart_f = tk.Frame(self.tab_ana, height=500); chart_f.pack(fill="x", padx=10)
+        self.fig = Figure(figsize=(10, 5.5), dpi=100); self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=chart_f); self.canvas.get_tk_widget().pack(fill="both", expand=True)
         
         # --- Bottom Section: Paned Tables ---
