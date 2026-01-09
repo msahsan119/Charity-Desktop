@@ -1074,8 +1074,56 @@ class CharityApp:
         self.mem_addr.delete(0, tk.END); self.mem_addr.insert(0, data.get('address', ''))
         self.mem_date.delete(0, tk.END); self.mem_date.insert(0, data.get('joined', ''))
 
-        
     def save_member(self):
+        new_name = self.mem_name.get().strip()
+        if not new_name: 
+            return messagebox.showerror("Error", "Name required")
+        
+        # --- RENAME LOGIC START ---
+        old_name = self.editing_member_original_name
+        
+        if old_name and old_name != new_name:
+            # 1. Check if the new name already exists to avoid accidental merging
+            if new_name in self.members_db:
+                if not messagebox.askyesno("Confirm", f"'{new_name}' already exists. Merge records?"):
+                    return
+
+            # 2. Update historical data in the DataFrame
+            if not self.df.empty:
+                # Update 'Name_Details' for Incoming transactions
+                self.df.loc[(self.df['Type'] == 'Incoming') & (self.df['Name_Details'] == old_name), 'Name_Details'] = new_name
+                # Update 'Responsible' for Outgoing transactions
+                self.df.loc[self.df['Responsible'] == old_name, 'Responsible'] = new_name
+                self.save_data() # Persist changes to CSV
+
+            # 3. Remove the old entry from the dictionary
+            if old_name in self.members_db:
+                del self.members_db[old_name]
+        # --- RENAME LOGIC END ---
+
+        # Standard save/update logic
+        mid = self.mem_id.get().strip() or str(uuid.uuid4())[:8]
+        
+        self.members_db[new_name] = {
+            "id": mid,
+            "group": self.mem_grp.get(), 
+            "phone": self.mem_phone.get(), 
+            "email": self.mem_email.get(), 
+            "address": self.mem_addr.get(), 
+            "joined": self.mem_date.get()
+        }
+        
+        self.save_members()
+        self.editing_member_original_name = None # Reset state
+        self.refresh_all_views() # Refresh dropdowns and lists
+        
+        # Clear fields
+        for entry in [self.mem_name, self.mem_id, self.mem_phone, self.mem_email, self.mem_addr, self.mem_date]:
+            entry.delete(0, tk.END)
+        self.mem_date.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        
+        messagebox.showinfo("Success", f"Member '{new_name}' updated successfully.")
+    def save_member_x2(self):
         name = self.mem_name.get().strip()
         if not name: return messagebox.showerror("Error", "Name required")
         
