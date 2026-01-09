@@ -34,8 +34,8 @@ CURRENCY = "€"
 
 # Defaults
 DEFAULT_INCOME = ["Sadaka", "Zakat", "Fitra", "Iftar", "Scholarship", "General"]
-DEFAULT_OUTGOING = ["Medical help", "Financial help", "Karje hasana", "Mosque", "Dead body", "Scholarship"]
-MEDICAL_SUB_TYPES = ["Heart", "Cancer", "Lung", "Brain", "Bone", "Other"]
+DEFAULT_OUTGOING = ["Medical help", "Financial help", "Karje hasana", "Mosque", "Dead body", "Scholarship", "Food donation"]
+MEDICAL_SUB_TYPES = ["Heart", "Cancer", "Lung", "Brain", "Bone", "Child", "Other"]
 
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", 
                "July", "August", "September", "October", "November", "December"]
